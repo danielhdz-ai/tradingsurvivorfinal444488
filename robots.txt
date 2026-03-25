@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Allow: /login
+Allow: /register
+Allow: /payment
+
+# No indexar panel privado, admin ni API
+Disallow: /admin
+Disallow: /api/
+Disallow: /app
+
+Sitemap: https://tradingsurvivor.com/sitemap.xml

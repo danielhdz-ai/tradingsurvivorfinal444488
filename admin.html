@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin — Trading Survivor</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0a0a0a;
+      color: #e0e0e0;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 16px;
+    }
+    .logo { height: 40px; margin-bottom: 8px; }
+    h1 { font-size: 20px; color: #00ff88; margin-bottom: 4px; }
+    .subtitle { color: #555; font-size: 13px; margin-bottom: 32px; }
+
+    .card {
+      background: #111;
+      border: 1px solid #222;
+      border-radius: 12px;
+      padding: 28px;
+      width: 100%;
+      max-width: 520px;
+      margin-bottom: 20px;
+    }
+    .card h2 { font-size: 15px; color: #aaa; margin-bottom: 18px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    label { display: block; font-size: 13px; color: #888; margin-bottom: 6px; }
+    input[type="text"], input[type="password"], input[type="number"] {
+      width: 100%;
+      background: #0a0a0a;
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 14px;
+      padding: 10px 14px;
+      margin-bottom: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus { border-color: #00ff88; }
+
+    .btn {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn-primary { background: #00ff88; color: #000; }
+    .btn-danger  { background: #ff4444; color: #fff; margin-top: 10px; }
+    .btn-secondary { background: #222; color: #aaa; border: 1px solid #333; margin-top: 10px; }
+
+    .result {
+      background: #0a0a0a;
+      border: 1px solid #222;
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 16px;
+      font-size: 13px;
+      line-height: 1.8;
+      display: none;
+    }
+    .result.show { display: block; }
+    .tag-pro   { color: #00ff88; font-weight: bold; }
+    .tag-free  { color: #888; }
+    .tag-active   { color: #00ff88; }
+    .tag-cancelled { color: #ff4444; }
+
+    .msg {
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-top: 14px;
+      display: none;
+    }
+    .msg.show { display: block; }
+    .msg.success { background: #0d2b1a; border: 1px solid #1a4a2e; color: #00ff88; }
+    .msg.error   { background: #2b0d0d; border: 1px solid #4a1a1a; color: #ff6666; }
+
+    .lock-screen {
+      position: fixed; inset: 0;
+      background: #0a0a0a;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 100;
+      padding: 24px;
+    }
+    .lock-screen h2 { color: #00ff88; margin: 16px 0 8px; }
+    .lock-screen p  { color: #555; font-size: 13px; margin-bottom: 20px; }
+    .lock-screen input { max-width: 320px; }
+    .lock-screen .btn  { max-width: 320px; }
+    #lockError { color: #ff4444; font-size: 13px; margin-top: 10px; display: none; }
+
+    .divider { border: none; border-top: 1px solid #1a1a1a; margin: 16px 0; }
+    .field-row { display: flex; gap: 10px; }
+    .field-row input { margin-bottom: 0; }
+  </style>
+</head>
+<body>
+
+  <!-- ── Pantalla de bloqueo ───────────────────────────────────────────────── -->
+  <div class="lock-screen" id="lockScreen">
+    <img src="/logos/tradingsurvivor-logo-dark.png" alt="Trading Survivor" style="height:48px;">
+    <h2>Panel de Administración</h2>
+    <p>Introduce la contraseña de admin para continuar</p>
+    <input type="password" id="secretInput" placeholder="Contraseña admin" maxlength="100"
+      onkeydown="if(event.key==='Enter') unlock()">
+    <button class="btn btn-primary" onclick="unlock()">Entrar</button>
+    <p id="lockError">Contraseña incorrecta</p>
+  </div>
+
+  <!-- ── Panel principal ──────────────────────────────────────────────────── -->
+  <img src="/logos/tradingsurvivor-logo-dark.png" alt="Trading Survivor" class="logo">
+  <h1>Panel Admin</h1>
+  <p class="subtitle">Trading Survivor — Gestión de suscripciones</p>
+
+  <!-- Buscar usuario -->
+  <div class="card">
+    <h2>🔍 Buscar usuario</h2>
+    <label>Email del usuario</label>
+    <input type="text" id="searchEmail" placeholder="usuario@ejemplo.com"
+      onkeydown="if(event.key==='Enter') buscarUsuario()">
+    <button class="btn btn-primary" onclick="buscarUsuario()">Buscar</button>
+
+    <div class="result" id="userResult">
+      <div><span style="color:#888;">Email:</span> <strong id="resEmail"></strong></div>
+      <div><span style="color:#888;">User ID:</span> <span id="resUserId" style="font-size:11px;color:#aaa;"></span></div>
+      <div><span style="color:#888;">Registrado:</span> <span id="resCreated"></span></div>
+      <hr class="divider">
+      <div><span style="color:#888;">Plan:</span> <span id="resPlan"></span></div>
+      <div><span style="color:#888;">Estado:</span> <span id="resStatus"></span></div>
+      <div><span style="color:#888;">Acceso hasta:</span> <span id="resExpiry"></span></div>
+    </div>
+  </div>
+
+  <!-- Activar acceso -->
+  <div class="card">
+    <h2>✅ Activar acceso PRO</h2>
+    <label>Email (o busca arriba para autorellenar)</label>
+    <input type="text" id="activateEmail" placeholder="usuario@ejemplo.com">
+    <label>Meses de acceso</label>
+    <div class="field-row">
+      <input type="number" id="activateMonths" value="12" min="1" max="36" style="width:100px;">
+      <span style="line-height:42px;color:#555;font-size:13px;">meses (12 = 1 año)</span>
+    </div>
+    <button class="btn btn-primary" onclick="activarAcceso()">Activar acceso PRO</button>
+    <div class="msg" id="activateMsg"></div>
+  </div>
+
+  <!-- Desactivar acceso -->
+  <div class="card">
+    <h2>❌ Desactivar / Cancelar</h2>
+    <label>Email del usuario</label>
+    <input type="text" id="deactivateEmail" placeholder="usuario@ejemplo.com">
+    <button class="btn btn-danger" onclick="desactivarAcceso()">Cancelar suscripción</button>
+    <div class="msg" id="deactivateMsg"></div>
+  </div>
+
+  <p style="color:#333;font-size:12px;margin-top:8px;">© 2026 Trading Survivor Admin</p>
+
+<script>
+  let adminSecret = '';
+  let currentUserId = '';
+
+  // ── Desbloqueo ──────────────────────────────────────────────────────────────
+  function unlock() {
+    const val = document.getElementById('secretInput').value.trim();
+    if (!val) return;
+    adminSecret = val;
+    // Hacer una petición de prueba para validar
+    fetch('/api/admin-activate?email=test@test.com', {
+      headers: { 'x-admin-secret': adminSecret }
+    }).then(r => {
+      if (r.status === 401) {
+        document.getElementById('lockError').style.display = 'block';
+        adminSecret = '';
+      } else {
+        // 404 = no encontrado pero autenticado ✅
+        document.getElementById('lockScreen').style.display = 'none';
+      }
+    }).catch(() => {
+      document.getElementById('lockError').style.display = 'block';
+    });
+  }
+
+  // ── Buscar usuario ───────────────────────────────────────────────────────────
+  async function buscarUsuario() {
+    const email = document.getElementById('searchEmail').value.trim();
+    if (!email) return;
+
+    const r = await fetch(`/api/admin-activate?email=${encodeURIComponent(email)}`, {
+      headers: { 'x-admin-secret': adminSecret }
+    });
+    const data = await r.json();
+
+    if (!r.ok) {
+      alert(data.error || 'Error al buscar usuario');
+      return;
+    }
+
+    currentUserId = data.userId;
+
+    // Autorellenar campos de activar/desactivar
+    document.getElementById('activateEmail').value = data.email;
+    document.getElementById('deactivateEmail').value = data.email;
+
+    const sub = data.subscription;
+    document.getElementById('resEmail').textContent = data.email;
+    document.getElementById('resUserId').textContent = data.userId;
+    document.getElementById('resCreated').textContent = new Date(data.createdAt).toLocaleString('es-ES');
+    document.getElementById('resPlan').innerHTML = sub
+      ? `<span class="${sub.plan === 'pro' ? 'tag-pro' : 'tag-free'}">${sub.plan.toUpperCase()}</span>`
+      : '<span class="tag-free">Sin suscripción</span>';
+    document.getElementById('resStatus').innerHTML = sub
+      ? `<span class="${sub.status === 'active' ? 'tag-active' : 'tag-cancelled'}">${sub.status}</span>`
+      : '—';
+    document.getElementById('resExpiry').textContent = sub?.current_period_end
+      ? new Date(sub.current_period_end).toLocaleDateString('es-ES')
+      : '—';
+
+    document.getElementById('userResult').classList.add('show');
+  }
+
+  // ── Activar acceso PRO ───────────────────────────────────────────────────────
+  async function activarAcceso() {
+    const email = document.getElementById('activateEmail').value.trim();
+    const months = parseInt(document.getElementById('activateMonths').value) || 12;
+    if (!email) { alert('Introduce el email'); return; }
+
+    // Si no tenemos el userId, buscamos primero
+    let userId = currentUserId;
+    if (!userId || document.getElementById('searchEmail').value.trim() !== email) {
+      const r = await fetch(`/api/admin-activate?email=${encodeURIComponent(email)}`, {
+        headers: { 'x-admin-secret': adminSecret }
+      });
+      const d = await r.json();
+      if (!r.ok) { alert(d.error || 'Usuario no encontrado'); return; }
+      userId = d.userId;
+    }
+
+    const r = await fetch('/api/admin-activate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-secret': adminSecret },
+      body: JSON.stringify({ userId, email, action: 'activate', months })
+    });
+    const data = await r.json();
+    const msg = document.getElementById('activateMsg');
+    if (r.ok) {
+      showMsg(msg, `✅ Acceso PRO activado para ${email} (${months} meses)`, 'success');
+      // Refrescar resultado si coincide
+      if (document.getElementById('searchEmail').value.trim() === email) buscarUsuario();
+    } else {
+      showMsg(msg, `❌ Error: ${data.error}`, 'error');
+    }
+  }
+
+  // ── Desactivar acceso ────────────────────────────────────────────────────────
+  async function desactivarAcceso() {
+    const email = document.getElementById('deactivateEmail').value.trim();
+    if (!email) { alert('Introduce el email'); return; }
+    if (!confirm(`¿Cancelar la suscripción de ${email}?`)) return;
+
+    let userId = currentUserId;
+    if (!userId || document.getElementById('searchEmail').value.trim() !== email) {
+      const r = await fetch(`/api/admin-activate?email=${encodeURIComponent(email)}`, {
+        headers: { 'x-admin-secret': adminSecret }
+      });
+      const d = await r.json();
+      if (!r.ok) { alert(d.error || 'Usuario no encontrado'); return; }
+      userId = d.userId;
+    }
+
+    const r = await fetch('/api/admin-activate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-secret': adminSecret },
+      body: JSON.stringify({ userId, email, action: 'deactivate' })
+    });
+    const data = await r.json();
+    const msg = document.getElementById('deactivateMsg');
+    if (r.ok) {
+      showMsg(msg, `✅ Suscripción cancelada para ${email}`, 'success');
+      if (document.getElementById('searchEmail').value.trim() === email) buscarUsuario();
+    } else {
+      showMsg(msg, `❌ Error: ${data.error}`, 'error');
+    }
+  }
+
+  function showMsg(el, text, type) {
+    el.textContent = text;
+    el.className = `msg show ${type}`;
+    setTimeout(() => el.classList.remove('show'), 6000);
+  }
+
+  // ── Auto-fill email desde query param ?email=XXX ────────────────────────────
+  (function() {
+    const params = new URLSearchParams(window.location.search);
+    const emailParam = params.get('email');
+    if (!emailParam) return;
+    // Pre-rellenar todos los campos de email
+    document.getElementById('searchEmail').value = emailParam;
+    document.getElementById('activateEmail').value = emailParam;
+    document.getElementById('deactivateEmail').value = emailParam;
+    // Banner informativo mientras el admin escribe su clave
+    const banner = document.createElement('p');
+    banner.style.cssText = 'text-align:center;color:#ffaa00;font-size:13px;margin-top:8px;';
+    banner.textContent = `⚡ Usuario pre-cargado: ${emailParam} — Ingresa tu clave y busca para activar.`;
+    document.getElementById('lockScreen').appendChild(banner);
+    // Después de desbloquear, buscar automáticamente
+    const origUnlock = window.unlock;
+    window.unlock = function() {
+      origUnlock();
+      // Esperar a que el unlock valide la clave
+      setTimeout(() => {
+        if (adminSecret) buscarUsuario();
+      }, 600);
+    };
+  })();
+</script>
+</body>
+</html>

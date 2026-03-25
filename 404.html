@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>404 — Página no encontrada | Trading Survivor</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #080b12;
+      color: #e5e7eb;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      text-align: center;
+    }
+    .logo {
+      margin-bottom: 48px;
+      opacity: 0.9;
+    }
+    .logo img { height: 38px; }
+    .error-code {
+      font-size: 120px;
+      font-weight: 800;
+      line-height: 1;
+      background: linear-gradient(135deg, #00ff88, #00cc66);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 16px;
+      letter-spacing: -4px;
+    }
+    .title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 12px;
+    }
+    .subtitle {
+      font-size: 15px;
+      color: #6b7280;
+      line-height: 1.7;
+      max-width: 420px;
+      margin: 0 auto 40px;
+    }
+    .actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #00ff88, #00cc66);
+      color: #000;
+      font-weight: 700;
+      border: none;
+      border-radius: 12px;
+      padding: 13px 28px;
+      font-size: 14px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 0 20px rgba(0,255,136,0.25);
+      transition: opacity .2s;
+    }
+    .btn-primary:hover { opacity: .88; }
+    .btn-ghost {
+      background: transparent;
+      color: #9ca3af;
+      border: 1px solid #1e2435;
+      border-radius: 12px;
+      padding: 13px 28px;
+      font-size: 14px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: border-color .2s, color .2s;
+    }
+    .btn-ghost:hover { border-color: rgba(0,255,136,0.4); color: #00ff88; }
+    .divider {
+      width: 1px;
+      height: 48px;
+      background: #1e2435;
+      margin: 40px auto;
+    }
+    .links {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .links a {
+      color: #374151;
+      font-size: 13px;
+      text-decoration: none;
+      transition: color .2s;
+    }
+    .links a:hover { color: #9ca3af; }
+    .glow {
+      position: fixed;
+      top: -200px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 600px;
+      height: 400px;
+      background: radial-gradient(ellipse, rgba(0,255,136,0.04) 0%, transparent 70%);
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="glow"></div>
+
+  <div class="logo">
+    <img src="/logos/tradingsurvivor-logo-clear.png" alt="Trading Survivor" onerror="this.style.display='none'" />
+  </div>
+
+  <div class="error-code">404</div>
+  <h1 class="title">Esta página no existe</h1>
+  <p class="subtitle">La URL que buscas no existe o fue movida. Puede que el enlace esté roto o que hayas escrito algo diferente a lo esperado.</p>
+
+  <div class="actions">
+    <a href="/" class="btn-primary">
+      <i class="fas fa-home"></i> Ir al inicio
+    </a>
+    <a href="/login" class="btn-ghost">
+      <i class="fas fa-sign-in-alt"></i> Iniciar sesión
+    </a>
+    <a href="/app" class="btn-ghost">
+      <i class="fas fa-chart-bar"></i> Mi plataforma
+    </a>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="links">
+    <a href="/terminos">Términos de uso</a>
+    <a href="/privacidad">Privacidad</a>
+    <a href="mailto:hola@tradingsurvivor.com">Soporte</a>
+  </div>
+</body>
+</html>

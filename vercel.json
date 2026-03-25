@@ -1,0 +1,86 @@
+{
+  "version": 2,
+  "rewrites": [
+    { "source": "/api/bingx/:path*",   "destination": "/api/exchanges.js" },
+    { "source": "/api/bingx",          "destination": "/api/exchanges.js" },
+    { "source": "/api/bitget/:path*",  "destination": "/api/exchanges.js" },
+    { "source": "/api/bitget",         "destination": "/api/exchanges.js" },
+    { "source": "/api/mexc/:path*",    "destination": "/api/exchanges.js" },
+    { "source": "/api/mexc",           "destination": "/api/exchanges.js" },
+    { "source": "/api/lbank/:path*",   "destination": "/api/exchanges.js" },
+    { "source": "/api/lbank",          "destination": "/api/exchanges.js" },
+    { "source": "/api/bitunix/:path*", "destination": "/api/exchanges.js" },
+    { "source": "/api/bitunix",        "destination": "/api/exchanges.js" },
+    { "source": "/api/bybit/:path*",   "destination": "/api/exchanges.js" },
+    { "source": "/api/bybit",          "destination": "/api/exchanges.js" },
+    { "source": "/api/binance/:path*", "destination": "/api/exchanges.js" },
+    { "source": "/api/binance",        "destination": "/api/exchanges.js" },
+    { "source": "/api/okx/:path*",     "destination": "/api/exchanges.js" },
+    { "source": "/api/okx",            "destination": "/api/exchanges.js" },
+    { "source": "/api/gate/:path*",    "destination": "/api/exchanges.js" },
+    { "source": "/api/gate",           "destination": "/api/exchanges.js" },
+    { "source": "/api/phemex/:path*",  "destination": "/api/exchanges.js" },
+    { "source": "/api/phemex",         "destination": "/api/exchanges.js" },
+    { "source": "/api/bitmart/:path*", "destination": "/api/exchanges.js" },
+    { "source": "/api/bitmart",        "destination": "/api/exchanges.js" },
+    { "source": "/api/credentials",    "destination": "/api/credentials.js" },
+    { "source": "/api/operations",     "destination": "/api/operations.js" },
+    { "source": "/api/ai-coach",       "destination": "/api/ai-coach.js" },
+    { "source": "/api/create-checkout",   "destination": "/api/create-checkout.js" },
+    { "source": "/api/stripe-webhook",    "destination": "/api/stripe-webhook.js" },
+    { "source": "/api/notify",            "destination": "/api/notify.js" },
+    { "source": "/api/admin-activate",    "destination": "/api/admin-activate.js" },
+    { "source": "/api/group-invitations",     "destination": "/api/group-invitations.js" },
+    { "source": "/api/proxy-ninjatrader",      "destination": "/api/proxy-ninjatrader.js" },
+    { "source": "/api/health",            "destination": "/api/health.js" },
+    { "source": "/terminos",           "destination": "/terminos.html" },
+    { "source": "/privacidad",          "destination": "/privacidad.html" },
+    { "source": "/app",                    "destination": "/platform.html" },
+    { "source": "/admin",                  "destination": "/admin.html" },
+    { "source": "/login",                  "destination": "/login.html" },
+    { "source": "/register",            "destination": "/register.html" },
+    { "source": "/payment",             "destination": "/payment.html" },
+    { "source": "/success",             "destination": "/success.html" },
+    { "source": "/",                    "destination": "/index.html" },
+    { "source": "/(.*)",                "destination": "/404.html" }
+  ],
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "headers": [
+    {
+      "source": "/logos/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=2592000, immutable" }]
+    },
+    {
+      "source": "/js/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400, stale-while-revalidate=3600" }]
+    },
+    {
+      "source": "/(.*)\\.css",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }]
+    },
+    {
+      "source": "/(.*)\\.png",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=2592000, immutable" }]
+    },
+    {
+      "source": "/(.*)\\.svg",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=2592000, immutable" }]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options",    "value": "nosniff" },
+        { "key": "X-Frame-Options",            "value": "DENY" },
+        { "key": "X-XSS-Protection",           "value": "1; mode=block" },
+        { "key": "Referrer-Policy",            "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy",         "value": "camera=(), microphone=(), geolocation=()" },
+        { "key": "Strict-Transport-Security",  "value": "max-age=63072000; includeSubDomains; preload" },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' https://*.supabase.co https://api.stripe.com https://js.stripe.com https://api.groq.com https://analytics.google.com; frame-src https://js.stripe.com; object-src 'none'; base-uri 'self';"
+        }
+      ]
+    }
+  ]
+}
