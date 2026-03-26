@@ -35309,9 +35309,12 @@ if (typeof MutationObserver !== 'undefined') {
             const stats = aiCoachComputeStats();
 
             try {
+                const { data: { session } } = await window.supabase.auth.getSession();
+                const authHeaders = { 'Content-Type': 'application/json' };
+                if (session?.access_token) authHeaders['Authorization'] = `Bearer ${session.access_token}`;
                 const response = await fetch('/api/ai-coach', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: authHeaders,
                     body: JSON.stringify({
                         message,
                         stats,
