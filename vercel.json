@@ -53,12 +53,24 @@
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=2592000, immutable" }]
     },
     {
+      "source": "/js/platform-main.js",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+    },
+    {
+      "source": "/js/platform-utils.js",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+    },
+    {
+      "source": "/frontend/(.*)\\.js",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+    },
+    {
       "source": "/js/(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400, stale-while-revalidate=3600" }]
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600, stale-while-revalidate=60" }]
     },
     {
       "source": "/(.*)\\.css",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }]
+      "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
     },
     {
       "source": "/(.*)\\.png",
