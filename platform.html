@@ -47,18 +47,28 @@
     </script>
     -->
     <!-- ===== FIN SENTRY ===== -->
+    <!-- PRELOAD: descarga anticipada de los recursos más grandes -->
+    <link rel="preload" href="js/platform-main.js" as="script">
+    <link rel="preload" href="js/platform-utils.js" as="script">
+    <link rel="preload" href="https://unpkg.com/dexie@3/dist/dexie.js" as="script" crossorigin="anonymous">
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js" as="script" crossorigin="anonymous">
+    <link rel="dns-prefetch" href="https://cdn.sheetjs.com">
+    <link rel="dns-prefetch" href="https://unpkg.com">
+    <link rel="dns-prefetch" href="https://esm.sh">
+    <link rel="dns-prefetch" href="https://s3.tradingview.com">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.2/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <!-- chart.js con defer: se usa solo en callbacks DOMContentLoaded -->
+    <script defer src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
     <!-- Chart.js Date Adapter -->
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <!-- Incluir Dexie.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <!-- Incluir Dexie.js: DEBE ser síncrono (usado en top-level de platform-main.js) -->
     <script src="https://unpkg.com/dexie@3/dist/dexie.js"></script>
-    <!-- Incluir CryptoJS para firmas HMAC -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-    <!-- Incluir Lightweight Charts v4.1.1 -->
-    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+    <!-- Incluir CryptoJS para firmas HMAC (solo en handlers, puede ser defer) -->
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script defer src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <!-- Incluir Lightweight Charts v4.1.1 (solo en handlers, puede ser defer) -->
+    <script defer src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
     <script>
     /* ================================================================
        TS CHART THEME PLUGIN
@@ -179,7 +189,7 @@
     </script>
     
     <!-- TradingView Widget API -->
-    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+    <script defer src="https://s3.tradingview.com/tv.js"></script>
     <!-- html2canvas y jsPDF para screenshots (defer: solo se usan al exportar PDF) -->
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
