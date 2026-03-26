@@ -35325,18 +35325,24 @@ if (typeof MutationObserver !== 'undefined') {
 
                 if (typingEl) typingEl.remove();
 
+                let data;
+                try { data = await response.json(); } catch { data = {}; }
+
                 if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
+                    const errMsg = data?.error || `HTTP ${response.status}`;
+                    throw new Error(errMsg);
                 }
 
-                const data = await response.json();
                 const reply = data.reply || 'Sin respuesta del servidor.';
                 aiCoachAppendMessage('assistant', reply);
                 aiCoachHistory.push({ role: 'assistant', content: reply });
 
             } catch (err) {
                 if (typingEl) typingEl.remove();
-                aiCoachAppendMessage('assistant', '⚠️ Error al conectar con el AI Coach. Verifica que la API key de Groq esté configurada en Vercel.');
+                const userMsg = err.message?.includes('API key') ? '⚠️ API key de Groq no configurada en Vercel.' :
+                    err.message?.includes('rate') || err.message?.includes('Rate') ? '⏳ Límite de mensajes alcanzado. Intenta en una hora.' :
+                    `⚠️ ${err.message || 'Error al conectar con el AI Coach.'}`;
+                aiCoachAppendMessage('assistant', userMsg);
                 console.error('❌ AI Coach error:', err);
             }
 

@@ -71,6 +71,12 @@ export default async function handler(req, res) {
         const GROQ_API_KEY = process.env.GROQ_API_KEY;
         if (!GROQ_API_KEY) return res.status(500).json({ error: 'API key de Groq no configurada en Vercel' });
 
+        // Helper seguro para formatear números (evita crash si llega null/NaN/Infinity)
+        const safeFixed = (v, d = 2) => {
+            const n = typeof v === 'number' ? v : parseFloat(v);
+            return isFinite(n) ? n.toFixed(d) : '0.00';
+        };
+
         // Construir contexto completo con todas las tablas de datos del trader
         const fmt = (arr, cols) => (arr || []).slice(0, 20).map(row =>
             cols.map(c => `${c}:${typeof row[c] === 'number' ? (row[c] >= 0 ? '+$' : '-$') + Math.abs(row[c]).toFixed(2) : row[c]}`).join(' | ')
@@ -83,10 +89,10 @@ Cuenta: ${stats.accountName}
 ══════════════════════════════════════
 
 📊 MÉTRICAS GLOBALES (${stats.totalTrades} operaciones totales):
-• P&L Neto: ${stats.netPL >= 0 ? '+' : ''}$${stats.netPL?.toFixed(2)}
-• Win Rate: ${stats.winRate?.toFixed(1)}%  |  Profit Factor: ${stats.profitFactor?.toFixed(2)}
-• R:R Ratio: ${stats.rrRatio?.toFixed(2)}  |  Max Drawdown: ${stats.maxDrawdown?.toFixed(1)}%
-• Avg Ganancia: +$${stats.avgWin?.toFixed(2)}  |  Avg Pérdida: -$${stats.avgLoss?.toFixed(2)}
+• P&L Neto: ${stats.netPL >= 0 ? '+' : ''}$${safeFixed(stats.netPL)}
+• Win Rate: ${safeFixed(stats.winRate, 1)}%  |  Profit Factor: ${safeFixed(stats.profitFactor)}
+• R:R Ratio: ${safeFixed(stats.rrRatio)}  |  Max Drawdown: ${safeFixed(stats.maxDrawdown, 1)}%
+• Avg Ganancia: +$${safeFixed(stats.avgWin)}  |  Avg Pérdida: -$${safeFixed(stats.avgLoss)}
 • Racha actual: ${stats.currentStreak}
 • Racha máx. ganadora: ${stats.maxWinStreak} ops  |  Racha máx. perdedora: ${stats.maxLossStreak} ops
 
@@ -97,25 +103,25 @@ ${fmt(stats.instrumentRanking, ['name', 'pl', 'trades', 'wr'])}
 ${fmt(stats.setupRanking, ['setup', 'pl', 'trades', 'wr', 'pf'])}
 
 🕐 RANKING POR HORA (mejor→peor):
-${(stats.hourRanking || []).map(h => `${h.hour}: ${h.pl >= 0 ? '+' : ''}$${h.pl.toFixed(0)} | WR ${h.wr} | ${h.trades}trades`).join('\n')}
+${(stats.hourRanking || []).map(h => `${h.hour}: ${h.pl >= 0 ? '+' : ''}$${safeFixed(h.pl, 0)} | WR ${h.wr} | ${h.trades}trades`).join('\n')}
 
 📅 RENDIMIENTO POR DÍA DE SEMANA:
-${(stats.dayRanking || []).map(d => `${d.day}: ${d.pl >= 0 ? '+' : ''}$${d.pl.toFixed(2)} | ${d.trades} trades | WR ${d.wr}`).join('\n')}
+${(stats.dayRanking || []).map(d => `${d.day}: ${d.pl >= 0 ? '+' : ''}$${safeFixed(d.pl)} | ${d.trades} trades | WR ${d.wr}`).join('\n')}
 
 🌍 RENDIMIENTO POR SESIÓN:
-${(stats.sessionRanking || []).map(s => `${s.session}: ${s.pl >= 0 ? '+' : ''}$${s.pl.toFixed(2)} | ${s.trades} trades | WR ${s.wr}`).join('\n')}
+${(stats.sessionRanking || []).map(s => `${s.session}: ${s.pl >= 0 ? '+' : ''}$${safeFixed(s.pl)} | ${s.trades} trades | WR ${s.wr}`).join('\n')}
 
 📆 EVOLUCIÓN MENSUAL (cronológico):
-${(stats.monthRanking || []).map(m => `${m.month}: ${m.pl >= 0 ? '+' : ''}$${m.pl.toFixed(2)} | ${m.trades} trades | WR ${m.wr}`).join('\n')}
+${(stats.monthRanking || []).map(m => `${m.month}: ${m.pl >= 0 ? '+' : ''}$${safeFixed(m.pl)} | ${m.trades} trades | WR ${m.wr}`).join('\n')}
 
 🏆 TOP 5 MEJORES TRADES:
-${(stats.topTrades || []).map((t, i) => `${i + 1}. ${t.date} | ${t.instrument} | +$${t.pl.toFixed(2)}`).join('\n')}
+${(stats.topTrades || []).map((t, i) => `${i + 1}. ${t.date} | ${t.instrument} | +$${safeFixed(t.pl)}`).join('\n')}
 
 💀 TOP 5 PEORES TRADES:
-${(stats.worstTrades || []).map((t, i) => `${i + 1}. ${t.date} | ${t.instrument} | $${t.pl.toFixed(2)}`).join('\n')}
+${(stats.worstTrades || []).map((t, i) => `${i + 1}. ${t.date} | ${t.instrument} | $${safeFixed(t.pl)}`).join('\n')}
 
 📋 ÚLTIMOS 15 TRADES (más reciente primero):
-${(stats.recentTrades || []).map(t => `${t.date} | ${t.result} | ${t.instrument} | ${t.pl >= 0 ? '+' : ''}$${t.pl.toFixed(2)} | Sesión: ${t.session} | Setup: ${t.setup}`).join('\n')}
+${(stats.recentTrades || []).map(t => `${t.date} | ${t.result} | ${t.instrument} | ${t.pl >= 0 ? '+' : ''}$${safeFixed(t.pl)} | Sesión: ${t.session} | Setup: ${t.setup}`).join('\n')}
 ` : 'El trader aún no tiene operaciones registradas. Pídele que registre sus trades primero para poder analizarlos.';
 
         // Historial del chat para mantener contexto conversacional
@@ -170,24 +176,28 @@ ${statsContext}`
             }
         ];
 
+        const groqBody = JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            messages,
+            max_tokens: 1200,
+            temperature: 0.55
+        });
+
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${GROQ_API_KEY}`
             },
-            body: JSON.stringify({
-                model: 'llama-3.3-70b-versatile',
-                messages,
-                max_tokens: 1200,
-                temperature: 0.55
-            })
+            body: groqBody
         });
 
         if (!response.ok) {
-            const errData = await response.json();
-            console.error('❌ Groq error:', errData);
-            return res.status(500).json({ error: 'Error al contactar Groq', details: errData });
+            let errData;
+            try { errData = await response.json(); } catch { errData = { raw: await response.text() }; }
+            console.error('❌ Groq error:', response.status, errData);
+            const msg = errData?.error?.message || errData?.raw || 'Error al contactar Groq';
+            return res.status(500).json({ error: msg, groqStatus: response.status });
         }
 
         const data = await response.json();
@@ -197,6 +207,6 @@ ${statsContext}`
 
     } catch (error) {
         console.error('❌ Error en ai-coach (Groq):', error);
-        return res.status(500).json({ error: 'Error interno del servidor' });
+        return res.status(500).json({ error: error?.message || 'Error interno del servidor' });
     }
 }
