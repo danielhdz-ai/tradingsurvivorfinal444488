@@ -166,8 +166,7 @@
         });
     })();
     </script>
-    <!-- SheetJS para leer archivos XLSX/XLS nativos -->
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <!-- SheetJS ya incluido arriba (xlsx-0.20.2) -->
     <!-- Lightweight Charts ya incluido arriba -->
     
     <!-- Supabase usando ES Module CDN -->
@@ -181,9 +180,9 @@
     
     <!-- TradingView Widget API -->
     <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-    <!-- html2canvas y jsPDF para screenshots -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- html2canvas y jsPDF para screenshots (defer: solo se usan al exportar PDF) -->
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
     <!-- Group Invitations CSS -->
     <link rel="stylesheet" href="frontend/group-invitations.css">
