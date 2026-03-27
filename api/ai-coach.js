@@ -197,7 +197,7 @@ ${statsContext}`
             let errData;
             try { errData = await response.json(); } catch { errData = { raw: await response.text() }; }
             console.error('❌ Gemini error:', response.status, errData);
-            const msg = errData?.error?.message || errData?.raw || 'Error al contactar Gemini';
+            const msg = errData?.error?.message || errData?.raw || `Error al contactar Gemini (HTTP ${response.status})`;
             return res.status(500).json({ error: msg, geminiStatus: response.status });
         }
 

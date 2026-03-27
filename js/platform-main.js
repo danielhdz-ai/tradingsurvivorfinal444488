@@ -1329,6 +1329,45 @@ if (typeof MutationObserver !== 'undefined') {
         }
 
 
+        // ===== ALMACENAMIENTO SEGURO DE CREDENCIALES =====
+        // Vincula las credenciales al user_id del propietario.
+        // Impide que un usuario vea las credenciales de otro aunque Dexie no haya sido limpiada.
+
+        async function saveApiKeysToDexie(keys) {
+            const ownerId = currentUser?.id || null;
+            await dexieDB.generalData.put({
+                key: 'apiKeys',
+                value: { _ownerId: ownerId, ...keys }
+            });
+        }
+
+        // Lee credenciales verificando el propietario.
+        // Devuelve null si no hay usuario, no hay datos, o el propietario no coincide.
+        async function loadApiKeysFromDexie() {
+            try {
+                const record = await dexieDB.generalData.get('apiKeys');
+                if (!record?.value) return null;
+                const { _ownerId, ...keys } = record.value;
+                // Registros legacy sin _ownerId no son verificables — descartar
+                if (!_ownerId) {
+                    console.warn('🔒 [Security] Credenciales sin propietario en Dexie — eliminando');
+                    await dexieDB.generalData.delete('apiKeys');
+                    return null;
+                }
+                // Sin usuario autenticado no se cargan credenciales
+                if (!currentUser) return null;
+                // Propietario diferente al usuario actual — eliminar y descartar
+                if (_ownerId !== currentUser.id) {
+                    console.warn('🔒 [Security] Credenciales de otro usuario detectadas en Dexie — eliminando');
+                    await dexieDB.generalData.delete('apiKeys');
+                    return null;
+                }
+                return keys;
+            } catch (e) {
+                return null;
+            }
+        }
+
         async function loadData() {
             showLoading(true);
             try {
@@ -1337,7 +1376,7 @@ if (typeof MutationObserver !== 'undefined') {
                     dexieDB.operations.toArray(),
                     dexieDB.finances.toArray(),
                     dexieDB.generalData.get('settings').then(result => result?.value),
-                    dexieDB.generalData.get('apiKeys').then(result => result?.value),
+                    loadApiKeysFromDexie(),
                     dexieDB.setups.toArray(),
                     dexieDB.fundedAccounts.toArray(),
                     dexieDB.fundedHistory.toArray()
@@ -1387,7 +1426,7 @@ if (typeof MutationObserver !== 'undefined') {
                             mode: 'real'
                         };
                         // Actualizar DB con las credenciales de localStorage
-                        await dexieDB.generalData.put({ key: 'apiKeys', value: DB.apiKeys });
+                        await saveApiKeysToDexie(DB.apiKeys);
                     }
                 } else {
                     // Si no hay datos en DB, verificar localStorage
@@ -1399,7 +1438,7 @@ if (typeof MutationObserver !== 'undefined') {
                             mode: 'real'
                         };
                     }
-                    await dexieDB.generalData.put({ key: 'apiKeys', value: DB.apiKeys });
+                    await saveApiKeysToDexie(DB.apiKeys);
                 }
 
 
@@ -24440,9 +24479,9 @@ if (typeof MutationObserver !== 'undefined') {
         }
 
         window.refreshAllViews = function refreshAllViews() {
-            const activeTabElement = document.querySelector('.nav-tab.active');
-            if (!activeTabElement) return;
-            const activeTabId = activeTabElement.dataset.target;
+            const activeSection = document.querySelector('.section-container.active');
+            if (!activeSection) return;
+            const activeTabId = activeSection.id;
 
             // Actualizar TODOS los selectores de cuentas primero
             const allSelectors = [
@@ -24513,6 +24552,9 @@ if (typeof MutationObserver !== 'undefined') {
             else if (activeTabId === 'calendar') {
                 // Ensure calendar is fully rendered when tab is switched to
                 setTimeout(() => updateCalendar(), 50);
+            }
+            else if (activeTabId === 'daily-journal') {
+                if (typeof refreshDailyJournal === 'function') refreshDailyJournal();
             }
             else if (activeTabId === 'operations') refreshOperationsTable();
             else if (activeTabId === 'accounts') refreshAccountsView();
@@ -32511,7 +32553,7 @@ if (typeof MutationObserver !== 'undefined') {
                             operations: await dexieDB.operations.toArray(),
                             finances: await dexieDB.finances.toArray(),
                             settings: (await dexieDB.generalData.get('settings'))?.value || DB.settings,
-                            apiKeys: (await dexieDB.generalData.get('apiKeys'))?.value || DB.apiKeys
+                            apiKeys: (await loadApiKeysFromDexie()) || DB.apiKeys
                         };
                         const dataStr = JSON.stringify(exportableDB, null, 2);
                         const dataBlob = new Blob([dataStr], { type: 'application/json' });
@@ -32545,7 +32587,7 @@ if (typeof MutationObserver !== 'undefined') {
                                     await dexieDB.operations.bulkPut(importedData.operations || []);
                                     await dexieDB.finances.bulkPut(importedData.finances || []);
                                     await dexieDB.generalData.put({ key: 'settings', value: importedData.settings || DB.settings });
-                                    await dexieDB.generalData.put({ key: 'apiKeys', value: importedData.apiKeys || DB.apiKeys });
+                                    await saveApiKeysToDexie(importedData.apiKeys || DB.apiKeys);
                                 });
                                 alert('Datos importados. Recargando aplicación...'); location.reload();
                             } else { alert('Error: Archivo con estructura no esperada.'); }
@@ -32576,7 +32618,7 @@ if (typeof MutationObserver !== 'undefined') {
                             DB.settings = { darkMode: true, showTooltips: true, autoRefresh: false, defaultCurrency: 'USD' };
                             DB.apiKeys = { ctrader: { key: '', secret: '', accountId: '' }, bingx: { key: '', secret: '', accountId: '' } };
                             await dexieDB.generalData.put({ key: 'settings', value: DB.settings });
-                            await dexieDB.generalData.put({ key: 'apiKeys', value: DB.apiKeys });
+                            await saveApiKeysToDexie(DB.apiKeys);
 
                             alert('Todos los datos han sido eliminados. Recargando aplicación...');
                             location.reload();
@@ -35339,7 +35381,7 @@ if (typeof MutationObserver !== 'undefined') {
 
             } catch (err) {
                 if (typingEl) typingEl.remove();
-                const userMsg = err.message?.includes('API key') ? '⚠️ API key de Groq no configurada en Vercel.' :
+                const userMsg = err.message?.includes('API key') ? '⚠️ API key de Gemini no configurada en Vercel.' :
                     err.message?.includes('rate') || err.message?.includes('Rate') ? '⏳ Límite de mensajes alcanzado. Intenta en una hora.' :
                     `⚠️ ${err.message || 'Error al conectar con el AI Coach.'}`;
                 aiCoachAppendMessage('assistant', userMsg);
@@ -40653,7 +40695,22 @@ function onUserLogout() {
     isAutoSyncEnabled = false;
     currentUser = null;
     window.currentUser = null; // Limpiar referencia global
-    console.log('👋 Usuario desconectado - sincronización automática pausada');
+
+    // SECURITY FIX: Limpiar credenciales de API de la caché local al cerrar sesión
+    // evita que un usuario nuevo vea las credenciales del usuario anterior
+    const emptyApiKeys = { ctrader: {}, bingx: {}, bitget: {}, mexc: {} };
+    if (typeof DB !== 'undefined') {
+        DB.apiKeys = emptyApiKeys;
+    }
+    if (typeof dexieDB !== 'undefined') {
+        dexieDB.generalData.delete('apiKeys').catch(() => {});
+    }
+    // Limpiar claves residuales de localStorage (migración legada)
+    localStorage.removeItem('bingx-api-key');
+    localStorage.removeItem('bingx-secret-key');
+    localStorage.removeItem('bingx-account-id');
+
+    console.log('👋 Usuario desconectado - credenciales y sincronización limpiadas');
     if (typeof Sentry !== 'undefined') Sentry.setUser(null);
 }
 
@@ -41846,9 +41903,17 @@ async function syncDataFromSupabase() {
             DB.settings = userSettings.settings;
             await dexieDB.generalData.put({ key: 'settings', value: userSettings.settings });
         }
+
+        // SECURITY FIX: Siempre resetear las credenciales antes de aplicar las de Supabase.
+        // Si el usuario nuevo no tiene credenciales en Supabase, la DB local quedará vacía
+        // en lugar de mostrar las credenciales almacenadas de un usuario anterior.
+        const emptyApiKeys = { ctrader: {}, bingx: {}, bitget: {}, mexc: {} };
         if (userSettings.apiKeys) {
             DB.apiKeys = userSettings.apiKeys;
-            await dexieDB.generalData.put({ key: 'apiKeys', value: userSettings.apiKeys });
+            await saveApiKeysToDexie(userSettings.apiKeys);
+        } else {
+            DB.apiKeys = emptyApiKeys;
+            await dexieDB.generalData.delete('apiKeys');
         }
 
         updateAccountBalances();
@@ -43806,7 +43871,7 @@ async function testBingXConnection() {
     console.log('💾 Guardando credenciales inmediatamente...');
     try {
         DB.apiKeys.bingx = { key: apiKey, secret: secretKey, mode: 'real', accountId: 'main' };
-        await dexieDB.generalData.put({ key: 'apiKeys', value: DB.apiKeys });
+        await saveApiKeysToDexie(DB.apiKeys);
 
         // Guardar estado de conexión en localStorage (no sensible)
         localStorage.setItem('bingx-connected', 'true');
@@ -43859,7 +43924,7 @@ async function testBingXConnection() {
 
             // Guardar las credenciales de todos modos
             DB.apiKeys.bingx = { key: apiKey, secret: secretKey, mode: 'real' };
-            await dexieDB.generalData.put({ key: 'apiKeys', value: DB.apiKeys });
+            await saveApiKeysToDexie(DB.apiKeys);
 
             // Limpiar claves sensibles de localStorage y guardar en Supabase
             localStorage.removeItem('bingx-api-key');
@@ -53807,7 +53872,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 // Guardar en DB también
                 DB.apiKeys.bingx = { key: apiKey, secret: secretKey, mode: 'real', accountId: 'main' };
-                await dexieDB.generalData.put({ key: 'apiKeys', value: DB.apiKeys });
+                await saveApiKeysToDexie(DB.apiKeys);
 
                 // Guardar en Supabase si el usuario está autenticado
                 if (currentUser) {
