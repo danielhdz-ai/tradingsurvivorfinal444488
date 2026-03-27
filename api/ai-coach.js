@@ -179,7 +179,9 @@ ${statsContext}`
 
         // ── Función auxiliar OpenRouter ──
         async function callOpenRouter(model, fallbackModel) {
-            const body = JSON.stringify({ model, messages, max_tokens: 1200, temperature: 0.55 });
+            // max_tokens alto porque los modelos de razonamiento consumen tokens pensando antes de responder
+            // temperature omitido: los modelos de razonamiento no lo soportan
+            const body = JSON.stringify({ model, messages, max_tokens: 4000 });
             const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                 method: 'POST',
                 headers: {
@@ -198,7 +200,10 @@ ${statsContext}`
                 return { ok: false, status: resp.status, error: err };
             }
             const json = await resp.json();
-            return { ok: true, reply: json.choices?.[0]?.message?.content ?? null };
+            // Algunos modelos de razonamiento devuelven el texto en 'reasoning' si 'content' es null
+            const msg = json.choices?.[0]?.message;
+            const reply = msg?.content || msg?.reasoning || null;
+            return { ok: true, reply };
         }
 
         // Primario: Step 3.5 Flash (100% uptime, Finance #7) — Fallback: NVIDIA Nemotron 3 Super (99.9% uptime)
