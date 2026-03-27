@@ -1,6 +1,6 @@
 // Vercel Serverless Function - AI Coach para TradingSurvivor
 // Requiere Authorization: Bearer <supabase-jwt>
-// Powered by Gemini (primario) + Groq (fallback automático)
+// Powered by OpenRouter — sin restricciones regionales, múltiples modelos gratuitos
 import { createClient } from '@supabase/supabase-js';
 import { setCors } from './_cors.js';
 
@@ -69,8 +69,8 @@ export default async function handler(req, res) {
         if (!message || typeof message !== 'string') return res.status(400).json({ error: 'Mensaje requerido' });
         if (message.length > 2000) return res.status(400).json({ error: 'Mensaje demasiado largo (máx 2000 caracteres)' });
 
-        const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-        if (!GEMINI_API_KEY) return res.status(500).json({ error: 'API key de Gemini no configurada en Vercel (GEMINI_API_KEY)' });
+        const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+        if (!OPENROUTER_API_KEY) return res.status(500).json({ error: 'API key de OpenRouter no configurada en Vercel (OPENROUTER_API_KEY)' });
 
         // Helper seguro para formatear números (evita crash si llega null/NaN/Infinity)
         const safeFixed = (v, d = 2) => {
@@ -177,60 +177,39 @@ ${statsContext}`
             }
         ];
 
-        const requestBody = JSON.stringify({
-            model: 'gemini-2.0-flash',
-            messages,
-            max_tokens: 1200,
-            temperature: 0.55
-        });
-
-        // ── Función auxiliar: llama a un proveedor y devuelve { ok, reply, status } ──
-        async function callProvider(url, apiKey, model, body) {
-            const resp = await fetch(url, {
+        // ── Función auxiliar OpenRouter ──
+        async function callOpenRouter(model, fallbackModel) {
+            const body = JSON.stringify({ model, messages, max_tokens: 1200, temperature: 0.55 });
+            const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-                body: body
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+                    'HTTP-Referer': 'https://tradingsurvivor.com',
+                    'X-Title': 'TradingSurvivor AI Coach'
+                },
+                body
             });
             if (!resp.ok) {
                 let err;
                 try { err = await resp.json(); } catch { err = { raw: await resp.text() }; }
+                console.warn(`⚠️ OpenRouter [${model}] falló (HTTP ${resp.status}), intentando fallback...`);
+                if (fallbackModel) return callOpenRouter(fallbackModel, null);
                 return { ok: false, status: resp.status, error: err };
             }
             const json = await resp.json();
             return { ok: true, reply: json.choices?.[0]?.message?.content ?? null };
         }
 
-        // ── Intento 1: Gemini ──
-        let result = await callProvider(
-            'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
-            GEMINI_API_KEY,
-            'gemini-2.0-flash',
-            requestBody
+        // Primario: Gemini 2.0 Flash (gratis) — Fallback: Llama 3.3 70B (gratis)
+        const result = await callOpenRouter(
+            'google/gemini-2.0-flash-exp:free',
+            'meta-llama/llama-3.3-70b-instruct:free'
         );
-
-        // ── Intento 2 (fallback): Groq si Gemini falla ──
-        if (!result.ok) {
-            console.warn(`⚠️ Gemini falló (HTTP ${result.status}), cambiando a Groq...`);
-            const GROQ_API_KEY = process.env.GROQ_API_KEY;
-            if (GROQ_API_KEY) {
-                const groqBody = JSON.stringify({
-                    model: 'llama-3.3-70b-versatile',
-                    messages,
-                    max_tokens: 1200,
-                    temperature: 0.55
-                });
-                result = await callProvider(
-                    'https://api.groq.com/openai/v1/chat/completions',
-                    GROQ_API_KEY,
-                    'llama-3.3-70b-versatile',
-                    groqBody
-                );
-            }
-        }
 
         if (!result.ok) {
             const errMsg = result.error?.error?.message || result.error?.raw || `Error al contactar el AI Coach (HTTP ${result.status})`;
-            console.error('❌ Ambos proveedores fallaron:', errMsg);
+            console.error('❌ OpenRouter falló:', errMsg);
             return res.status(500).json({ error: errMsg });
         }
 
