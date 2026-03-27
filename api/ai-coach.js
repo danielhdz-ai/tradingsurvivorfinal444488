@@ -1,5 +1,6 @@
 // Vercel Serverless Function - AI Coach para TradingSurvivor
 // Requiere Authorization: Bearer <supabase-jwt>
+// Powered by Google Gemini (gemini-2.0-flash) - 1500 req/día gratis
 import { createClient } from '@supabase/supabase-js';
 import { setCors } from './_cors.js';
 
@@ -68,8 +69,8 @@ export default async function handler(req, res) {
         if (!message || typeof message !== 'string') return res.status(400).json({ error: 'Mensaje requerido' });
         if (message.length > 2000) return res.status(400).json({ error: 'Mensaje demasiado largo (máx 2000 caracteres)' });
 
-        const GROQ_API_KEY = process.env.GROQ_API_KEY;
-        if (!GROQ_API_KEY) return res.status(500).json({ error: 'API key de Groq no configurada en Vercel' });
+        const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+        if (!GEMINI_API_KEY) return res.status(500).json({ error: 'API key de Gemini no configurada en Vercel (GEMINI_API_KEY)' });
 
         // Helper seguro para formatear números (evita crash si llega null/NaN/Infinity)
         const safeFixed = (v, d = 2) => {
@@ -176,28 +177,28 @@ ${statsContext}`
             }
         ];
 
-        const groqBody = JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
+        const geminiBody = JSON.stringify({
+            model: 'gemini-2.0-flash',
             messages,
             max_tokens: 1200,
             temperature: 0.55
         });
 
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${GROQ_API_KEY}`
+                'Authorization': `Bearer ${GEMINI_API_KEY}`
             },
-            body: groqBody
+            body: geminiBody
         });
 
         if (!response.ok) {
             let errData;
             try { errData = await response.json(); } catch { errData = { raw: await response.text() }; }
-            console.error('❌ Groq error:', response.status, errData);
-            const msg = errData?.error?.message || errData?.raw || 'Error al contactar Groq';
-            return res.status(500).json({ error: msg, groqStatus: response.status });
+            console.error('❌ Gemini error:', response.status, errData);
+            const msg = errData?.error?.message || errData?.raw || 'Error al contactar Gemini';
+            return res.status(500).json({ error: msg, geminiStatus: response.status });
         }
 
         const data = await response.json();
@@ -206,7 +207,7 @@ ${statsContext}`
         return res.status(200).json({ reply });
 
     } catch (error) {
-        console.error('❌ Error en ai-coach (Groq):', error);
+        console.error('❌ Error en ai-coach (Gemini):', error);
         return res.status(500).json({ error: error?.message || 'Error interno del servidor' });
     }
 }
