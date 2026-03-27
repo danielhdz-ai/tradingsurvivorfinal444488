@@ -201,10 +201,10 @@ ${statsContext}`
             return { ok: true, reply: json.choices?.[0]?.message?.content ?? null };
         }
 
-        // Primario: Gemini 2.0 Flash (gratis) — Fallback: Llama 3.3 70B (gratis)
+        // Primario: Step 3.5 Flash (100% uptime, Finance #7) — Fallback: NVIDIA Nemotron 3 Super (99.9% uptime)
         const result = await callOpenRouter(
-            'google/gemini-2.0-flash-exp:free',
-            'meta-llama/llama-3.3-70b-instruct:free'
+            'stepfun/step-3.5-flash:free',
+            'nvidia/nemotron-3-super-120b-a12b:free'
         );
 
         if (!result.ok) {
