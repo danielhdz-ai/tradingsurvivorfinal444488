@@ -16871,7 +16871,7 @@ if (typeof MutationObserver !== 'undefined') {
             
             if (type === 'date') {
                 // Mostrar tabs para análisis de día
-                tabsContainer.style.display = 'block';
+                tabsContainer.style.display = 'flex';
                 if (metricasTab) metricasTab.textContent = 'Métricas del Día';
                 if (notasTab) notasTab.textContent = 'Notas del Día';
                 
@@ -16940,7 +16940,7 @@ if (typeof MutationObserver !== 'undefined') {
                 initAnalyticsDetailTabs()
             } else if (type === 'month') {
                 // Mostrar tabs para análisis de mes
-                tabsContainer.style.display = 'block';
+                tabsContainer.style.display = 'flex';
                 if (metricasTab) metricasTab.textContent = 'Métricas del Mes';
                 if (notasTab) notasTab.textContent = 'Notas del Mes';
                 
@@ -17006,7 +17006,7 @@ if (typeof MutationObserver !== 'undefined') {
                 initAnalyticsDetailTabs();
             } else if (type === 'week') {
                 // Mostrar tabs para análisis de semana
-                tabsContainer.style.display = 'block';
+                tabsContainer.style.display = 'flex';
                 if (metricasTab) metricasTab.textContent = 'Métricas de la Semana';
                 if (notasTab) notasTab.textContent = 'Notas de la Semana';
                 
@@ -17072,7 +17072,7 @@ if (typeof MutationObserver !== 'undefined') {
                 initAnalyticsDetailTabs();
             } else if (type === 'quarter') {
                 // Mostrar tabs para análisis de trimestre
-                tabsContainer.style.display = 'block';
+                tabsContainer.style.display = 'flex';
                 if (metricasTab) metricasTab.textContent = 'Métricas del Trimestre';
                 if (notasTab) notasTab.textContent = 'Notas del Trimestre';
                 
