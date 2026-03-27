@@ -1,6 +1,6 @@
 // Vercel Serverless Function - AI Coach para TradingSurvivor
 // Requiere Authorization: Bearer <supabase-jwt>
-// Powered by Google Gemini (gemini-2.0-flash) - 1500 req/día gratis
+// Powered by Gemini (primario) + Groq (fallback automático)
 import { createClient } from '@supabase/supabase-js';
 import { setCors } from './_cors.js';
 
@@ -177,37 +177,67 @@ ${statsContext}`
             }
         ];
 
-        const geminiBody = JSON.stringify({
+        const requestBody = JSON.stringify({
             model: 'gemini-2.0-flash',
             messages,
             max_tokens: 1200,
             temperature: 0.55
         });
 
-        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${GEMINI_API_KEY}`
-            },
-            body: geminiBody
-        });
-
-        if (!response.ok) {
-            let errData;
-            try { errData = await response.json(); } catch { errData = { raw: await response.text() }; }
-            console.error('❌ Gemini error:', response.status, errData);
-            const msg = errData?.error?.message || errData?.raw || `Error al contactar Gemini (HTTP ${response.status})`;
-            return res.status(500).json({ error: msg, geminiStatus: response.status });
+        // ── Función auxiliar: llama a un proveedor y devuelve { ok, reply, status } ──
+        async function callProvider(url, apiKey, model, body) {
+            const resp = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+                body: body
+            });
+            if (!resp.ok) {
+                let err;
+                try { err = await resp.json(); } catch { err = { raw: await resp.text() }; }
+                return { ok: false, status: resp.status, error: err };
+            }
+            const json = await resp.json();
+            return { ok: true, reply: json.choices?.[0]?.message?.content ?? null };
         }
 
-        const data = await response.json();
-        const reply = data.choices?.[0]?.message?.content ?? 'No se pudo generar respuesta.';
+        // ── Intento 1: Gemini ──
+        let result = await callProvider(
+            'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+            GEMINI_API_KEY,
+            'gemini-2.0-flash',
+            requestBody
+        );
 
-        return res.status(200).json({ reply });
+        // ── Intento 2 (fallback): Groq si Gemini falla ──
+        if (!result.ok) {
+            console.warn(`⚠️ Gemini falló (HTTP ${result.status}), cambiando a Groq...`);
+            const GROQ_API_KEY = process.env.GROQ_API_KEY;
+            if (GROQ_API_KEY) {
+                const groqBody = JSON.stringify({
+                    model: 'llama-3.3-70b-versatile',
+                    messages,
+                    max_tokens: 1200,
+                    temperature: 0.55
+                });
+                result = await callProvider(
+                    'https://api.groq.com/openai/v1/chat/completions',
+                    GROQ_API_KEY,
+                    'llama-3.3-70b-versatile',
+                    groqBody
+                );
+            }
+        }
+
+        if (!result.ok) {
+            const errMsg = result.error?.error?.message || result.error?.raw || `Error al contactar el AI Coach (HTTP ${result.status})`;
+            console.error('❌ Ambos proveedores fallaron:', errMsg);
+            return res.status(500).json({ error: errMsg });
+        }
+
+        return res.status(200).json({ reply: result.reply ?? 'No se pudo generar respuesta.' });
 
     } catch (error) {
-        console.error('❌ Error en ai-coach (Gemini):', error);
+        console.error('❌ Error en ai-coach:', error);
         return res.status(500).json({ error: error?.message || 'Error interno del servidor' });
     }
 }
