@@ -2,6 +2,51 @@
 // Requiere Authorization: Bearer <supabase-jwt>
 import { createClient } from '@supabase/supabase-js';
 import { setCors } from './_cors.js';
+import crypto from 'crypto';
+
+// [H-2] Cifrado AES-256-GCM para API keys en reposo
+// Configurar CREDENTIALS_ENCRYPTION_KEY en Vercel: 64 chars hex (32 bytes)
+// Generar con: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+function _getEncKey() {
+    const hex = process.env.CREDENTIALS_ENCRYPTION_KEY || '';
+    return hex.length === 64 ? Buffer.from(hex, 'hex') : null;
+}
+function encryptField(value) {
+    const key = _getEncKey();
+    if (!key || !value) return value;
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const enc = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return `enc:${iv.toString('hex')}:${tag.toString('hex')}:${enc.toString('hex')}`;
+}
+function decryptField(value) {
+    if (!value || !String(value).startsWith('enc:')) return value;
+    const key = _getEncKey();
+    if (!key) return value;
+    try {
+        const [, ivHex, tagHex, dataHex] = value.split(':');
+        const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivHex, 'hex'));
+        decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+        return decipher.update(Buffer.from(dataHex, 'hex')) + decipher.final('utf8');
+    } catch { return value; }
+}
+function decryptCredentials(apiKeys) {
+    const out = {};
+    for (const [ex, creds] of Object.entries(apiKeys)) {
+        if (creds && typeof creds === 'object') {
+            out[ex] = {
+                ...creds,
+                apiKey:    decryptField(creds.apiKey),
+                secretKey: decryptField(creds.secretKey),
+                ...(creds.passphrase !== undefined && { passphrase: decryptField(creds.passphrase) })
+            };
+        } else {
+            out[ex] = creds;
+        }
+    }
+    return out;
+}
 
 const supabase = createClient(
     process.env.SUPABASE_URL,
@@ -37,10 +82,11 @@ export default async function handler(req, res) {
                 .single();
             if (error && error.code !== 'PGRST116') return res.status(500).json({ error: error.message });
             const apiKeys = data?.settings?.api_keys || {};
+            const decrypted = decryptCredentials(apiKeys);
             if (exchange) {
-                return res.status(200).json({ success: true, credentials: apiKeys[exchange] || null });
+                return res.status(200).json({ success: true, credentials: decrypted[exchange] || null });
             }
-            return res.status(200).json({ success: true, credentials: apiKeys });
+            return res.status(200).json({ success: true, credentials: decrypted });
         }
 
         // SAVE — guardar/actualizar credenciales de un exchange
@@ -56,9 +102,9 @@ export default async function handler(req, res) {
                 .single();
             const currentApiKeys = existing?.settings?.api_keys || {};
             currentApiKeys[exchange] = {
-                apiKey,
-                secretKey,
-                ...(passphrase && { passphrase }),
+                apiKey:    encryptField(apiKey),
+                secretKey: encryptField(secretKey),
+                ...(passphrase && { passphrase: encryptField(passphrase) }),
                 ...(accountId  && { accountId }),
                 updatedAt: new Date().toISOString()
             };

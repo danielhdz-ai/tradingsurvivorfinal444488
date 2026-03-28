@@ -7,13 +7,17 @@
 // Instalar dependencia: npm install stripe
 
 import Stripe from 'stripe';
+import { createClient } from '@supabase/supabase-js';
+import { setCors } from './_cors.js';
 
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '*';
+const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_KEY
+);
 
 export default async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
+    setCors(req, res);
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
@@ -23,19 +27,27 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
+    // [H-1] Verificar JWT — el userId DEBE venir del token, no del cliente
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!token) {
+        return res.status(401).json({ error: 'Token de autorización requerido' });
+    }
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+        return res.status(401).json({ error: 'Token inválido o expirado' });
+    }
+
     const secretKey = process.env.STRIPE_SECRET_KEY;
     if (!secretKey || !secretKey.startsWith('sk_')) {
         return res.status(500).json({ error: 'Stripe no configurado en el servidor' });
     }
 
-    const { userId, email } = req.body || {};
-
-    if (!userId || !email) {
-        return res.status(400).json({ error: 'userId y email son requeridos' });
-    }
+    // email puede venir del body para el recibo; si no, usamos el del token
+    const email = req.body?.email || user.email;
 
     // Validación básica de email
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return res.status(400).json({ error: 'Email inválido' });
     }
 
@@ -49,7 +61,7 @@ export default async function handler(req, res) {
             automatic_payment_methods: { enabled: true },
             receipt_email: email,
             metadata: {
-                supabase_user_id: userId,
+                supabase_user_id: user.id,   // [H-1] siempre del JWT, nunca del body
                 product: 'Trading Survivor Annual',
                 plan: 'annual_129'
             },

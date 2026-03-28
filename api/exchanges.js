@@ -181,6 +181,10 @@ async function handleMEXC(req, res) {
     if (!apiKey || !secretKey || !endpoint) {
         return res.status(400).json({ success: false, error: 'Faltan apiKey, secretKey o endpoint en el body' });
     }
+    // [H-3] Validar endpoint para prevenir path traversal
+    if (!endpoint.startsWith('/') || endpoint.includes('..') || !/^\/[a-zA-Z0-9\-_./]*$/.test(endpoint)) {
+        return res.status(400).json({ success: false, error: 'Endpoint inválido' });
+    }
 
     const timestamp    = (await getServerTime('mexc')).toString();
     const sortedParams = Object.keys(params).sort().reduce((acc, key) => { acc[key] = params[key]; return acc; }, {});
@@ -223,6 +227,10 @@ async function handleLBank(req, res) {
     const { apiKey, privateKey, endpoint, params = {} } = req.body;
     if (!apiKey || !privateKey || !endpoint) {
         return res.status(400).json({ success: false, error: 'Faltan apiKey, privateKey o endpoint en el body' });
+    }
+    // [H-3] Validar endpoint para prevenir path traversal
+    if (!endpoint.startsWith('/') || endpoint.includes('..') || !/^\/[a-zA-Z0-9\-_./]*$/.test(endpoint)) {
+        return res.status(400).json({ success: false, error: 'Endpoint inválido' });
     }
 
     const lbankTimestamp = (await getServerTime('lbank')).toString();
