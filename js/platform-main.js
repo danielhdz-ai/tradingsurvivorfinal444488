@@ -19930,15 +19930,23 @@ if (typeof MutationObserver !== 'undefined') {
         
         let newDashboardCharts = {
             netPlGauge: null,
+            comisionesGauge: null,
             winRateGauge: null,
+            dayWinGauge: null,
             profitFactorGauge: null,
             cumulativeChart: null,
             dailyPlChart: null,
             radarChart: null
         };
         
-        // Función principal para refrescar el nuevo dashboard
+        // Función principal para refrescar el nuevo dashboard (con debounce de 50 ms)
+        let _newDashboardRefreshTimer = null;
         function refreshNewDashboard() {
+            if (_newDashboardRefreshTimer) clearTimeout(_newDashboardRefreshTimer);
+            _newDashboardRefreshTimer = setTimeout(_doRefreshNewDashboard, 50);
+        }
+        function _doRefreshNewDashboard() {
+            _newDashboardRefreshTimer = null;
             if (!document.getElementById('dashboard')?.classList.contains('active')) return;
 
             const accountSelect = document.getElementById('new-dashboard-account-select');
@@ -20161,11 +20169,6 @@ if (typeof MutationObserver !== 'undefined') {
         function updateNewDashboardCumulativeChart(operations, currency) {
             const canvas = document.getElementById('new-dash-cumulative-chart');
             if (!canvas) return;
-            const ctx = canvas.getContext('2d');
-            
-            if (newDashboardCharts.cumulativeChart) {
-                newDashboardCharts.cumulativeChart.destroy();
-            }
             
             const displayCurrency = currency;
             const targetCurrency = displayCurrency === '%' ? DB.settings.defaultCurrency : displayCurrency;
@@ -20192,7 +20195,18 @@ if (typeof MutationObserver !== 'undefined') {
                 data.push(0);
             }
             
-            newDashboardCharts.cumulativeChart = new Chart(ctx, {
+            // Actualizar chart existente sin destroy (mucho más rápido en cada filtro)
+            if (newDashboardCharts.cumulativeChart) {
+                const ch = newDashboardCharts.cumulativeChart;
+                ch.data.labels = labels;
+                ch.data.datasets[0].data = data;
+                ch.options.scales.y.ticks.callback = (val) => formatCurrency(val, targetCurrency, displayCurrency);
+                ch.options.plugins.tooltip.callbacks.label = (ctx) => `P&L: ${formatCurrency(ctx.raw, targetCurrency, displayCurrency)}`;
+                ch.update('none');
+                return;
+            }
+            
+            newDashboardCharts.cumulativeChart = new Chart(canvas.getContext('2d'), {
                 type: 'line',
                 data: {
                     labels,
@@ -20241,11 +20255,6 @@ if (typeof MutationObserver !== 'undefined') {
         function updateNewDashboardDailyPLChart(operations, currency) {
             const canvas = document.getElementById('new-dash-daily-pl-chart');
             if (!canvas) return;
-            const ctx = canvas.getContext('2d');
-            
-            if (newDashboardCharts.dailyPlChart) {
-                newDashboardCharts.dailyPlChart.destroy();
-            }
             
             const displayCurrency = currency;
             const targetCurrency = displayCurrency === '%' ? DB.settings.defaultCurrency : displayCurrency;
@@ -20272,15 +20281,31 @@ if (typeof MutationObserver !== 'undefined') {
                 data.push(0);
             }
             
-            newDashboardCharts.dailyPlChart = new Chart(ctx, {
+            const bgColors = data.map(val => val >= 0 ? 'rgba(57, 255, 20, 0.8)' : 'rgba(255, 65, 54, 0.8)');
+            const borderColors = data.map(val => val >= 0 ? '#39ff14' : '#ff4136');
+            
+            // Actualizar chart existente sin destroy (mucho más rápido en cada filtro)
+            if (newDashboardCharts.dailyPlChart) {
+                const ch = newDashboardCharts.dailyPlChart;
+                ch.data.labels = labels;
+                ch.data.datasets[0].data = data;
+                ch.data.datasets[0].backgroundColor = bgColors;
+                ch.data.datasets[0].borderColor = borderColors;
+                ch.options.scales.y.ticks.callback = (val) => formatCurrency(val, targetCurrency, displayCurrency);
+                ch.options.plugins.tooltip.callbacks.label = (ctx) => `P&L: ${formatCurrency(ctx.raw, targetCurrency, displayCurrency)}`;
+                ch.update('none');
+                return;
+            }
+            
+            newDashboardCharts.dailyPlChart = new Chart(canvas.getContext('2d'), {
                 type: 'bar',
                 data: {
                     labels,
                     datasets: [{
                         label: 'P&L Diario',
                         data,
-                        backgroundColor: data.map(val => val >= 0 ? 'rgba(57, 255, 20, 0.8)' : 'rgba(255, 65, 54, 0.8)'),
-                        borderColor: data.map(val => val >= 0 ? '#39ff14' : '#ff4136'),
+                        backgroundColor: bgColors,
+                        borderColor: borderColors,
                         borderWidth: 1
                     }]
                 },
