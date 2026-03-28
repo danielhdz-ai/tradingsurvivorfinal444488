@@ -2,6 +2,7 @@
 // Rutas: /api/bingx, /api/bitget, /api/mexc, /api/lbank, /api/bitunix
 // Un solo archivo = 1 función Vercel (ahorra 4 slots del plan Hobby)
 import crypto from 'crypto';
+import { createClient } from '@supabase/supabase-js';
 import {
     rateLimiters,
     fetchWithRetry,
@@ -27,8 +28,20 @@ function detectExchange(url) {
 }
 
 export default async function handler(req, res) {
-    setCorsHeaders(res);
+    setCorsHeaders(req, res);
     if (req.method === 'OPTIONS') return res.status(200).end();
+
+    // [C-1] Verificar JWT — el proxy no puede ser público
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, error: 'Token de autorización requerido' });
+    }
+    const token = authHeader.substring(7);
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+        return res.status(401).json({ success: false, error: 'Token inválido o expirado' });
+    }
 
     const exchange = detectExchange(req.url);
     if (!exchange) return res.status(400).json({ success: false, error: 'Unknown exchange' });

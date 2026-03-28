@@ -9,10 +9,15 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
 
 export default async function handler(req, res) {
-    // Habilitar CORS
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // [C-2] CORS restringido al dominio configurado
+    const _allowed = (process.env.APP_DOMAIN || '').split(',').map(s => s.trim()).filter(Boolean);
+    const _origin = req.headers.origin || '';
+    const _allowedOrigin = _allowed.length === 0 ? (_origin || '*') : (_allowed.includes(_origin) ? _origin : _allowed[0]);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Origin', _allowedOrigin);
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (_allowed.length > 0) res.setHeader('Vary', 'Origin');
 
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
@@ -112,6 +117,18 @@ async function handleGet(req, res, supabase, user) {
 
     // GET invitaciones de un grupo específico
     if (group_id) {
+        // [C-4] Verificar que el usuario es miembro del grupo antes de exponer invitaciones
+        const { data: membership } = await supabase
+            .from('group_members')
+            .select('id')
+            .eq('group_id', group_id)
+            .eq('user_id', user.id)
+            .single();
+
+        if (!membership) {
+            return res.status(403).json({ error: 'No tienes acceso a las invitaciones de este grupo' });
+        }
+
         const { data, error } = await supabase
             .from('group_invitations')
             .select(`
@@ -278,15 +295,24 @@ async function handleDelete(req, res, supabase, user) {
         });
     }
 
-    const { error } = await supabase
+    // [C-3] Solo el creador de la invitación puede eliminarla
+    const { data: deleted, error } = await supabase
         .from('group_invitations')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('invited_by', user.id)
+        .select('id');
 
     if (error) {
         console.error('Error eliminando invitación:', error);
         return res.status(400).json({ 
             error: error.message || 'Error al eliminar invitación' 
+        });
+    }
+
+    if (!deleted || deleted.length === 0) {
+        return res.status(403).json({ 
+            error: 'No tienes permiso para eliminar esta invitación' 
         });
     }
 

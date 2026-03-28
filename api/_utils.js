@@ -239,10 +239,16 @@ export async function getServerTime(exchange) {
     }
 }
 
-// Headers CORS estándar
-export function setCorsHeaders(res) {
+// Headers CORS restringidos al dominio configurado (igual que _cors.js)
+export function setCorsHeaders(req, res) {
+    const allowed = (process.env.APP_DOMAIN || '').split(',').map(s => s.trim()).filter(Boolean);
+    const origin = (req && req.headers && req.headers.origin) || '';
+    const allowedOrigin = allowed.length === 0
+        ? (origin || '*')
+        : (allowed.includes(origin) ? origin : allowed[0]);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
     res.setHeader('Access-Control-Allow-Headers', 'X-API-KEY, X-SECRET-KEY, X-CSRF-Token, X-Requested-With, Accept, Content-Type, Authorization');
+    if (allowed.length > 0) res.setHeader('Vary', 'Origin');
 }
