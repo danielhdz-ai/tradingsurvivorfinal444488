@@ -6084,6 +6084,47 @@ html {
     scroll-behavior: smooth;
 }
 
+/* ── Estado de carga en valores de métricas del dashboard ── */
+.metric-value-loading {
+    opacity: 0.35;
+    animation: metric-value-pulse 1.1s ease-in-out infinite;
+    pointer-events: none;
+}
+
+@keyframes metric-value-pulse {
+    0%, 100% { opacity: 0.35; }
+    50%       { opacity: 0.65; }
+}
+
+/* Barra de progreso en cards de métricas durante carga */
+.metric-card-loading::after {
+    content: '';
+    display: block;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 2px;
+    width: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(57, 255, 20, 0.7) 50%,
+        transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: metric-card-sweep 1.4s linear infinite;
+}
+
+.metric-card-loading {
+    position: relative;
+    overflow: hidden;
+}
+
+@keyframes metric-card-sweep {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
 [data-scroll-smooth] {
     scroll-behavior: smooth;
 }

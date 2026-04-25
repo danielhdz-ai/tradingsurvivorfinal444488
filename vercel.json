@@ -61,6 +61,10 @@
       "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
     },
     {
+      "source": "/js/metrics-worker.js",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+    },
+    {
       "source": "/frontend/(.*)\\.js",
       "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
     },
@@ -91,7 +95,7 @@
         { "key": "Strict-Transport-Security",  "value": "max-age=63072000; includeSubDomains; preload" },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://unpkg.com https://cdn.sheetjs.com https://*.tradingview.com https://*.tradingview-widget.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://js.stripe.com https://api.groq.com https://generativelanguage.googleapis.com https://analytics.google.com https://api.coingecko.com https://api.exchangerate-api.com https://www.alphavantage.co https://esm.sh https://unpkg.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; frame-src https://js.stripe.com https://*.tradingview.com https://tradingview.com https://*.tradingview-widget.com https://tradingview-widget.com; object-src 'none'; base-uri 'self';"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://unpkg.com https://cdn.sheetjs.com https://*.tradingview.com https://*.tradingview-widget.com https://www.googletagmanager.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://js.stripe.com https://api.groq.com https://generativelanguage.googleapis.com https://analytics.google.com https://api.coingecko.com https://api.exchangerate-api.com https://www.alphavantage.co https://esm.sh https://unpkg.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; frame-src https://js.stripe.com https://*.tradingview.com https://tradingview.com https://*.tradingview-widget.com https://tradingview-widget.com; object-src 'none'; base-uri 'self';"
         }
       ]
     }

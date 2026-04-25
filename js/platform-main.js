@@ -184,6 +184,93 @@ function hideSkeleton(containerId, newContent) {
     LoadingManager.hideSkeleton(containerId, newContent);
 }
 
+// ── Estado de carga en las tarjetas de métricas del dashboard ──
+// Se activa al inicio de onUserLogin() para feedback inmediato
+const METRIC_VALUE_IDS = [
+    'new-dash-net-pl', 'new-dash-comisiones', 'new-dash-win-rate',
+    'new-dash-day-win-rate', 'new-dash-profit-factor', 'new-dash-avg-ratio',
+    'new-dash-avg-win', 'new-dash-avg-loss', 'new-dash-total-trades',
+    'new-dash-wins', 'new-dash-losses', 'new-dash-day-wins', 'new-dash-day-losses'
+];
+
+function showMetricLoadingState() {
+    METRIC_VALUE_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('metric-value-loading');
+    });
+    // Añadir barra de progreso en las tarjetas
+    document.querySelectorAll('#dashboard .metric-card').forEach(card => {
+        card.classList.add('metric-card-loading');
+    });
+}
+
+function hideMetricLoadingState() {
+    METRIC_VALUE_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('metric-value-loading');
+    });
+    document.querySelectorAll('#dashboard .metric-card').forEach(card => {
+        card.classList.remove('metric-card-loading');
+    });
+}
+
+window.showMetricLoadingState = showMetricLoadingState;
+window.hideMetricLoadingState = hideMetricLoadingState;
+
+// ── Web Worker para calculateMetrics (hilo secundario) ───────────────────
+// Evita que los recálculos bloqueen la UI al cambiar filtros / cuentas.
+const MetricsWorker = (() => {
+    let _worker = null;
+    let _pending = {};
+    let _nextId = 1;
+
+    function _getWorker() {
+        if (_worker) return _worker;
+        try {
+            _worker = new Worker('js/metrics-worker.js');
+            _worker.onmessage = (e) => {
+                const { id, metrics, dayWinStats, error } = e.data;
+                const cb = _pending[id];
+                delete _pending[id];
+                if (!cb) return;
+                if (error) cb(null, null, error);
+                else       cb(metrics, dayWinStats, null);
+            };
+            _worker.onerror = (e) => {
+                console.warn('⚠️ MetricsWorker error:', e.message);
+                _worker = null; // reintentar en el próximo uso
+            };
+        } catch (err) {
+            console.warn('⚠️ Web Workers no soportados en este entorno:', err.message);
+        }
+        return _worker;
+    }
+
+    /**
+     * Calcula métricas en background y llama a cb(metrics, dayWinStats, error).
+     * Si los Workers no están disponibles, cae en el cálculo síncrono en el hilo principal.
+     */
+    return {
+        calculate(operations, accountId, accounts, defaultCurrency, cb) {
+            const worker = _getWorker();
+            if (!worker) {
+                // Fallback síncrono si Workers no están disponibles
+                try {
+                    const metrics     = calculateMetrics(operations, accountId);
+                    const dayWinStats = calculateDayWinStats(operations);
+                    cb(metrics, dayWinStats, null);
+                } catch (e) { cb(null, null, e.message); }
+                return;
+            }
+            const id = _nextId++;
+            _pending[id] = cb;
+            worker.postMessage({ id, type: 'calculate', operations, accountId, accounts, defaultCurrency });
+        }
+    };
+})();
+
+window.MetricsWorker = MetricsWorker;
+
 /* ═══════════════════════════════════════════════════════════════
    🎨 SISTEMA DE ANIMACIONES
    ═══════════════════════════════════════════════════════════════ */
@@ -19961,24 +20048,11 @@ if (typeof MutationObserver !== 'undefined') {
                 operations = operations.filter(op => op.accountId === selectedAccount);
             }
 
-            const metrics     = calculateMetrics(operations, selectedAccount);
-            const dayWinStats = calculateDayWinStats(operations);
-            const grossPL     = metrics.totalWin + metrics.totalLoss;
-            const netPL       = grossPL - metrics.totalFees;
-
-            metrics.winDays  = dayWinStats.winningDays;
-            metrics.loseDays = dayWinStats.losingDays;
-
-            // ── Métricas + gauges primero (visible al instante, canvas nativo) ──
-            updateNewDashboardMetrics(metrics, netPL, displayCurrency);
-            updateNewDashboardGauges(metrics, netPL);
-
-            // ── Gráficos diferidos al siguiente frame ──
+            // Gráficos diferidos al siguiente frame (no dependen de métricas)
             const _ops = operations;
             requestAnimationFrame(() => {
                 updateNewDashboardCalendar(_ops);
                 updateNewDashboardRecentOps(_ops, displayCurrency);
-
                 setTimeout(() => {
                     updateNewDashboardCumulativeChart(_ops, displayCurrency);
                     updateNewDashboardDailyPLChart(_ops, displayCurrency);
@@ -19987,6 +20061,28 @@ if (typeof MutationObserver !== 'undefined') {
                     updateDayPerformanceChart(_ops, 'new-dash-day-chart');
                 }, 0);
             });
+
+            // ── Métricas calculadas en Web Worker (hilo secundario) ──
+            // Los valores numéricos se actualizan en el callback sin bloquear la UI.
+            MetricsWorker.calculate(
+                operations,
+                selectedAccount,
+                DB.accounts,
+                DB.settings.defaultCurrency,
+                (metrics, dayWinStats, error) => {
+                    if (error) {
+                        // Fallback: recalcular síncronamente si el worker falla
+                        metrics     = calculateMetrics(operations, selectedAccount);
+                        dayWinStats = calculateDayWinStats(operations);
+                    }
+                    const grossPL = metrics.totalWin + metrics.totalLoss;
+                    const netPL   = grossPL - metrics.totalFees;
+                    metrics.winDays  = dayWinStats.winningDays;
+                    metrics.loseDays = dayWinStats.losingDays;
+                    updateNewDashboardMetrics(metrics, netPL, displayCurrency);
+                    updateNewDashboardGauges(metrics, netPL);
+                }
+            );
         }
         
         // Actualizar tabla de operaciones recientes
@@ -40231,22 +40327,26 @@ async function onUserLogin(user) {
 
     console.log('🔐 Usuario autenticado en onUserLogin:', user.email);
 
-    // Verificar plan/suscripción del usuario
-    const subscription = await checkUserSubscription(user.id);
-    console.log(`✅ Suscripción verificada: ${subscription.plan} (activa: ${subscription.isActive})`);
+    // Mostrar estado de carga inmediatamente en las métricas del dashboard
+    if (typeof showMetricLoadingState === 'function') showMetricLoadingState();
 
     try {
-        // Cargar datos en paralelo para mejorar la velocidad
-        console.log('📥 Cargando todos los datos en paralelo...');
-        
-        // ===== AUTO-LOAD: Cargar todos los datos necesarios =====
-        const [accounts, operations, fundedAccounts, finances, setups] = await Promise.all([
+        // ── Fase 1: carga rápida en paralelo ──────────────────────────────
+        // Se incluye checkUserSubscription en el mismo Promise.all para no
+        // bloquear la carga de datos mientras se verifica el plan.
+        console.log('📥 [Fase 1] Cargando datos base + suscripción en paralelo...');
+        const [subscription, accounts, recentOperations, fundedAccounts, finances, setups] = await Promise.all([
+            checkUserSubscription(user.id),
             loadAccountsFromSupabase(),
-            loadOperationsFromSupabase(), // ✅ ACTIVADO: Necesario para funcionalidad completa
+            loadRecentOperationsQuick(), // ⚡ Solo últimos 30 días → métricas rápidas
             loadFundedAccountsFromSupabase(),
             loadFinancesFromSupabase(),
             loadSetupsFromSupabase()
         ]);
+        console.log(`✅ Suscripción verificada: ${subscription.plan} (activa: ${subscription.isActive})`);
+
+        // Usar las operaciones recientes como dataset inicial
+        const operations = recentOperations;
         
         console.log('📊 Datos recibidos:', {
             accounts: accounts.length,
@@ -40466,77 +40566,91 @@ async function onUserLogin(user) {
         loadUserPublicSettings();
     }
     
-    // Desactivar flag de carga inicial después de un pequeño delay
-    setTimeout(() => {
-        if (typeof isInitialLoad !== 'undefined') {
-            isInitialLoad = false;
-            console.log('✅ Carga inicial completada - refreshes automáticos habilitados');
-        }
-        
-        // Refrescar todas las vistas una sola vez después de cargar todo
-        console.log('🔄 Refrescando vistas después de carga completa...');
-        
-        // Refrescar la vista activa
-        const activeSection = document.querySelector('.main-content > section.active');
-        if (activeSection) {
-            const sectionId = activeSection.id;
-            console.log(`📊 Vista activa: ${sectionId}`);
-            
-            switch(sectionId) {
-                case 'dashboard':
-                    if (typeof refreshNewDashboard === 'function') refreshNewDashboard();
-                    break;
-                case 'dashboard-advance':
-                    if (typeof refreshDashboard === 'function') refreshDashboard();
-                    break;
-                case 'analytics':
-                    if (typeof refreshAnalytics === 'function') refreshAnalytics();
-                    break;
-                case 'chartbook':
-                    if (typeof refreshChartbook === 'function') refreshChartbook();
-                    break;
-                case 'equity-graph':
-                    if (typeof refreshEquityGraph === 'function') refreshEquityGraph();
-                    break;
-                case 'daily-journal':
-                    if (typeof refreshDailyJournal === 'function') refreshDailyJournal();
-                    break;
-                case 'calendar':
-                    if (typeof updateCalendar === 'function') updateCalendar();
-                    break;
-                case 'audicion':
-                    if (typeof refreshAudicion === 'function') refreshAudicion();
-                    break;
-                case 'funded':
-                    if (typeof refreshFunded === 'function') refreshFunded();
-                    break;
-                case 'finances':
-                    // Detectar qué vista de finanzas está activa
-                    const activeFinanceTab = document.querySelector('.finances-tab.active');
-                    if (activeFinanceTab) {
-                        const viewId = activeFinanceTab.id.replace('-tab-', '-view-');
-                        console.log('🔄 Refrescando vista de finanzas:', viewId);
-                        if (typeof updateFinancesView === 'function') {
-                            updateFinancesView(viewId);
-                        }
-                    } else if (typeof refreshFinancesView === 'function') {
-                        refreshFinancesView();
-                    }
-                    break;
-                default:
-                    // Por defecto refrescar nuevo dashboard
-                    if (typeof refreshNewDashboard === 'function') refreshNewDashboard();
-            }
-        } else {
-            // Si no hay sección activa, refrescar dashboard
-            if (typeof refreshNewDashboard === 'function') refreshNewDashboard();
-        }
-        
-        console.log('✅ Vistas refrescadas correctamente');
+    // ── Fase 1 completada: refrescar vistas inmediatamente ───────────────
+    if (typeof isInitialLoad !== 'undefined') {
+        isInitialLoad = false;
+        console.log('✅ Carga inicial (Fase 1) completada - refreshes automáticos habilitados');
+    }
 
-        // Mostrar onboarding si es la primera vez
-        setTimeout(() => checkAndShowOnboarding(), 1500);
-    }, 1000);
+    // Quitar estado de carga de métricas
+    if (typeof hideMetricLoadingState === 'function') hideMetricLoadingState();
+
+    // Refrescar la vista activa sin delay innecesario
+    console.log('🔄 Refrescando vistas (Fase 1 — últimos 30 días)...');
+    _refreshActiveSection();
+
+    // Mostrar onboarding si es la primera vez (diferido para no bloquear UI)
+    setTimeout(() => checkAndShowOnboarding(), 1500);
+
+    // ── Fase 2 en background: cargar historial completo (6 meses) ────────
+    // Se lanza sin await para no bloquear la UI. Cuando termina, actualiza
+    // silenciosamente las métricas con el histórico completo.
+    console.log('🔄 [Fase 2] Cargando historial completo en background (6 meses)...');
+    loadOperationsFromSupabase().then(async (fullOperations) => {
+        if (!fullOperations || fullOperations.length === 0) return;
+        if (fullOperations.length <= (window.DB?.operations?.length || 0)) return;
+
+        console.log(`✅ [Fase 2] ${fullOperations.length} operaciones completas recibidas, actualizando...`);
+        try {
+            window.DB.operations = fullOperations;
+            await window.dexieDB.operations.clear();
+            await window.dexieDB.operations.bulkPut(fullOperations);
+            // Refrescar solo el dashboard para que las métricas históricas sean correctas
+            if (typeof refreshNewDashboard === 'function') refreshNewDashboard();
+            if (typeof refreshAudicion === 'function') refreshAudicion();
+            console.log('✅ [Fase 2] Dashboard actualizado con historial completo');
+        } catch (e) {
+            console.warn('⚠️ [Fase 2] Error actualizando con historial completo:', e.message);
+        }
+    }).catch(e => {
+        console.warn('⚠️ [Fase 2] Error cargando historial completo:', e.message);
+    });
+}
+
+// Helper: refresca la sección activa del sidebar
+function _refreshActiveSection() {
+    const activeSection = document.querySelector('.main-content > section.active');
+    const sectionId = activeSection ? activeSection.id : 'dashboard';
+    switch (sectionId) {
+        case 'dashboard':
+            if (typeof refreshNewDashboard === 'function') refreshNewDashboard();
+            break;
+        case 'dashboard-advance':
+            if (typeof refreshDashboard === 'function') refreshDashboard();
+            break;
+        case 'analytics':
+            if (typeof refreshAnalytics === 'function') refreshAnalytics();
+            break;
+        case 'chartbook':
+            if (typeof refreshChartbook === 'function') refreshChartbook();
+            break;
+        case 'equity-graph':
+            if (typeof refreshEquityGraph === 'function') refreshEquityGraph();
+            break;
+        case 'daily-journal':
+            if (typeof refreshDailyJournal === 'function') refreshDailyJournal();
+            break;
+        case 'calendar':
+            if (typeof updateCalendar === 'function') updateCalendar();
+            break;
+        case 'audicion':
+            if (typeof refreshAudicion === 'function') refreshAudicion();
+            break;
+        case 'funded':
+            if (typeof refreshFunded === 'function') refreshFunded();
+            break;
+        case 'finances': {
+            const activeFinanceTab = document.querySelector('.finances-tab.active');
+            if (activeFinanceTab && typeof updateFinancesView === 'function') {
+                updateFinancesView(activeFinanceTab.id.replace('-tab-', '-view-'));
+            } else if (typeof refreshFinancesView === 'function') {
+                refreshFinancesView();
+            }
+            break;
+        }
+        default:
+            if (typeof refreshNewDashboard === 'function') refreshNewDashboard();
+    }
 }
 
 // ===== ONBOARDING =====
@@ -41431,6 +41545,60 @@ async function saveOperationToSupabase(operationData) {
     }
 }
 
+// ── Carga rápida: últimos 30 días, límite 200 ──────────────────────────────
+// Se usa en la fase 1 de onUserLogin() para mostrar métricas cuanto antes.
+// La carga completa (6 meses) se lanza en background justo después.
+async function loadRecentOperationsQuick() {
+    if (!currentUser) return [];
+    try {
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        console.log('⚡ [loadRecentOperationsQuick] Cargando últimos 30 días...');
+        const { data, error } = await supabase
+            .from('operations')
+            .select('id, account_id, date, instrument, type, entry, exit, entry_time, exit_time, volume, result, pl, currency, notes, fees, commission, manual_pl, session, setup_id, mae, mfe')
+            .eq('user_id', currentUser.id)
+            .gte('date', thirtyDaysAgo.toISOString())
+            .order('date', { ascending: false })
+            .limit(200);
+        if (error) throw error;
+        console.log(`⚡ [loadRecentOperationsQuick] ${data?.length || 0} operaciones recientes recibidas`);
+        return _mapOperations(data || []);
+    } catch (error) {
+        console.warn('⚠️ [loadRecentOperationsQuick] Error:', error.message);
+        return [];
+    }
+}
+
+// Helper interno para mapear formato Supabase → formato local
+function _mapOperations(data) {
+    return data.map(operation => ({
+        id: operation.id,
+        accountId: operation.account_id,
+        date: operation.date,
+        instrument: operation.instrument,
+        type: operation.type,
+        entry: operation.entry || 0,
+        exit: operation.exit || 0,
+        entryTime: operation.entry_time,
+        exitTime: operation.exit_time,
+        volume: operation.volume || 0,
+        result: operation.result,
+        pl: operation.pl || 0,
+        currency: operation.currency || 'USD',
+        notes: operation.notes || '',
+        imageDatas: [],
+        fees: operation.fees || operation.commission || 0,
+        manualPL: operation.manual_pl || operation.pl || 0,
+        session: operation.session || 'No especificado',
+        setupId: operation.setup_id || null,
+        setupUsed: operation.setup_id || null,
+        mae: operation.mae || 0,
+        mfe: operation.mfe || 0
+    }));
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 async function loadOperationsFromSupabase() {
     if (!currentUser) {
         console.warn('⚠️ [loadOperationsFromSupabase] No hay usuario autenticado');
@@ -41468,37 +41636,8 @@ async function loadOperationsFromSupabase() {
             console.log('📋 [loadOperationsFromSupabase] Primera operación:', data[0]);
         }
 
-        // Convertir de formato Supabase a formato local
-        const mappedOperations = data.map(operation => {
-            // Imágenes vacías - se cargarán bajo demanda
-            const imageDatas = [];
-            
-            return {
-                id: operation.id,
-                accountId: operation.account_id,
-                date: operation.date,
-                instrument: operation.instrument,
-                type: operation.type,
-                entry: operation.entry || 0,
-                exit: operation.exit || 0,
-                entryTime: operation.entry_time,
-                exitTime: operation.exit_time,
-                volume: operation.volume || 0,
-                result: operation.result,
-                pl: operation.pl || 0,
-                currency: operation.currency || 'USD',
-                notes: operation.notes || '',
-                imageDatas: imageDatas, // Imágenes vacías - se cargarán bajo demanda al abrir detalle
-                fees: operation.fees || operation.commission || 0,
-                manualPL: operation.manual_pl || operation.pl || 0,
-                session: operation.session || 'No especificado',
-                setupId: operation.setup_id || null,
-                setupUsed: operation.setup_id || null,
-                mae: operation.mae || 0,
-                mfe: operation.mfe || 0
-            };
-        });
-        
+        // Convertir de formato Supabase a formato local (reutiliza _mapOperations)
+        const mappedOperations = _mapOperations(data || []);
         console.log(`✅ [loadOperationsFromSupabase] ${mappedOperations.length} operaciones mapeadas correctamente`);
         return mappedOperations;
         
