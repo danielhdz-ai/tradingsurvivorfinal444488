@@ -5076,6 +5076,9 @@ if (typeof MutationObserver !== 'undefined') {
         // Inicializar NUEVO Dashboard
         function initNewDashboard() {
             updateAccountSelect('new-dashboard-account-select');
+            // Pintar caché instantánea ANTES de cualquier llamada de red
+            // Así el usuario ve sus números reales en ~0ms
+            _paintCachedMetrics();
             refreshNewDashboard();
         }
         
@@ -20081,6 +20084,8 @@ if (typeof MutationObserver !== 'undefined') {
                     metrics.loseDays = dayWinStats.losingDays;
                     updateNewDashboardMetrics(metrics, netPL, displayCurrency);
                     updateNewDashboardGauges(metrics, netPL);
+                    // Quitar indicador de datos obsoletos
+                    _clearStaleIndicator();
                 }
             );
         }
@@ -20195,8 +20200,90 @@ if (typeof MutationObserver !== 'undefined') {
             
             const lossBarEl = document.getElementById('new-dash-loss-bar');
             if (lossBarEl) lossBarEl.style.width = `${lossPercent}%`;
+
+            // ── Guardar métricas en caché de localStorage ──────────────────
+            // Se usa para mostrar valores instantáneamente en la próxima carga.
+            try {
+                const cachePayload = {
+                    ts: Date.now(),
+                    netPL,
+                    totalFees: metrics.totalFees || 0,
+                    winRate: metrics.winRate,
+                    winningTrades: metrics.winningTrades,
+                    losingTrades: metrics.losingTrades,
+                    winDays: metrics.winDays || 0,
+                    loseDays: metrics.loseDays || 0,
+                    profitFactor: metrics.profitFactor,
+                    avgWin,
+                    avgLoss,
+                    ratio,
+                    winPercent,
+                    lossPercent,
+                    totalTrades: metrics.totalTrades,
+                    currency,
+                    defaultCurrency: DB.settings.defaultCurrency
+                };
+                localStorage.setItem('_dash_metrics_cache', JSON.stringify(cachePayload));
+            } catch (_) { /* cuota de localStorage llena — ignorar */ }
         }
-        
+
+        // ── Pintar métricas desde la caché de localStorage ─────────────────
+        // Llamado en initNewDashboard() antes de cualquier llamada de red.
+        function _paintCachedMetrics() {
+            try {
+                const raw = localStorage.getItem('_dash_metrics_cache');
+                if (!raw) return;
+                const c = JSON.parse(raw);
+                // Solo usar caché si tiene menos de 24 horas
+                if (!c || (Date.now() - c.ts) > 86400000) return;
+
+                const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+                const fmt = (n, cur) => {
+                    const abs = Math.abs(n).toFixed(2);
+                    const sym = cur === 'EUR' ? '€' : '$';
+                    return `${n < 0 ? '-' : ''}${sym}${parseFloat(abs).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                };
+
+                set('new-dash-net-pl',        fmt(c.netPL, c.currency));
+                set('new-dash-comisiones',    fmt(c.totalFees, c.currency));
+                set('new-dash-win-rate',      `${c.winRate.toFixed(2)}%`);
+                set('new-dash-wins',          c.winningTrades);
+                set('new-dash-losses',        c.losingTrades);
+                const dayWinRate = (c.winDays + c.loseDays) > 0 ? (c.winDays / (c.winDays + c.loseDays) * 100) : 0;
+                set('new-dash-day-win-rate',  `${dayWinRate.toFixed(2)}%`);
+                set('new-dash-day-wins',      c.winDays);
+                set('new-dash-day-losses',    c.loseDays);
+                set('new-dash-profit-factor', isFinite(c.profitFactor) ? c.profitFactor.toFixed(2) : '∞');
+                set('new-dash-avg-ratio',     c.ratio.toFixed(2));
+                set('new-dash-avg-win',       fmt(c.avgWin, c.currency));
+                set('new-dash-avg-loss',      fmt(-c.avgLoss, c.currency));
+                set('new-dash-total-trades',  `${c.totalTrades} trades`);
+                set('new-dash-comisiones-count', `${c.totalTrades} fees`);
+
+                const wb = document.getElementById('new-dash-win-bar');
+                if (wb) wb.style.width = `${c.winPercent}%`;
+                const lb = document.getElementById('new-dash-loss-bar');
+                if (lb) lb.style.width = `${c.lossPercent}%`;
+
+                // Indicador sutil de que los datos se están actualizando
+                const netPlEl = document.getElementById('new-dash-net-pl');
+                if (netPlEl) {
+                    netPlEl.style.opacity = '0.7';
+                    netPlEl.title = 'Actualizando datos...';
+                }
+                const colorEl = document.getElementById('new-dash-net-pl');
+                if (colorEl) colorEl.className = `text-xl font-bold hide-amount mb-1 ${c.netPL >= 0 ? 'text-green' : 'text-red'}`;
+
+                console.log('⚡ [MetricsCache] Métricas mostradas desde caché al instante');
+            } catch (_) { /* caché corrupta — ignorar */ }
+        }
+
+        // Quitar el indicador de "actualizando" una vez que los datos frescos llegaron
+        function _clearStaleIndicator() {
+            const el = document.getElementById('new-dash-net-pl');
+            if (el) { el.style.opacity = ''; el.title = ''; }
+        }
+
         // Actualizar todos los gauge charts
         function updateNewDashboardGauges(metrics, netPL) {
             // Net P/L Gauge
@@ -37420,6 +37507,10 @@ if (typeof MutationObserver !== 'undefined') {
 
         // Inicializar modal y event listeners
         document.addEventListener('DOMContentLoaded', async () => {
+            // ⚡ Mostrar métricas cacheadas ANTES de cualquier operación de red o Dexie
+            // El usuario ve sus números reales en el primer frame (~0ms)
+            _paintCachedMetrics();
+
             initSidebar();
             initConfigNavigation();
 
@@ -37437,7 +37528,8 @@ if (typeof MutationObserver !== 'undefined') {
             initCalendar();
             initOperations();
             initAccounts();
-            await initConfig();
+            // initConfig no bloquea la UI principal — se ejecuta en background
+            initConfig().catch(e => console.warn('⚠️ initConfig error:', e));
             initPlatforms();
             initDateRangeModal();
             initImageModal();
