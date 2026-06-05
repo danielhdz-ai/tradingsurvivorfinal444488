@@ -43,6 +43,8 @@
     { "source": "/payment",             "destination": "/payment.html" },
     { "source": "/success",             "destination": "/success.html" },
     { "source": "/googlea44b19201288e425.html", "destination": "/googlea44b19201288e425.html" },
+    { "source": "/sitemap.xml",         "destination": "/sitemap.xml" },
+    { "source": "/robots.txt",          "destination": "/robots.txt" },
     { "source": "/",                    "destination": "/index.html" },
     { "source": "/(.*)",                "destination": "/404.html" }
   ],
