@@ -272,7 +272,7 @@
                     <a href="#" id="header-config-btn">
                         <i class="fas fa-cog"></i>Configuración
                     </a>
-                    <a href="#" id="header-logout-btn" class="logout-link">
+                    <a href="/login?logout=1" id="header-logout-btn" class="logout-link" onclick="event.preventDefault(); if(window.performFullLogout) window.performFullLogout();">
                         <i class="fas fa-sign-out-alt"></i>Cerrar Sesión
                     </a>
                 </div>

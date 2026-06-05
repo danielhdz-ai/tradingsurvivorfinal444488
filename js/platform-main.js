@@ -40080,6 +40080,17 @@ if (typeof MutationObserver !== 'undefined') {
 // Variable global para el cliente Supabase
 var supabase = null;
 
+/** Cliente Supabase unificado — nunca devuelve null si window.supabase está listo */
+function getSupabaseClient() {
+    if (supabase?.auth) return supabase;
+    if (window.supabase?.auth) {
+        supabase = window.supabase;
+        return supabase;
+    }
+    return null;
+}
+window.getSupabaseClient = getSupabaseClient;
+
 // Función para inicializar Supabase esperando al evento si es necesario
 async function initializeSupabase() {
     // Si ya está disponible, usarlo inmediatamente
@@ -40462,6 +40473,13 @@ async function onUserLogin(user) {
 }
 
 async function _onUserLoginImpl(user) {
+    await initializeSupabase();
+    const authClient = getSupabaseClient();
+    if (!authClient) {
+        console.error('❌ [onUserLogin] Cliente Supabase no disponible — abortando carga de datos');
+        return;
+    }
+
     currentUser = user;
     window.currentUser = user;
     isAutoSyncEnabled = true;
@@ -40781,7 +40799,13 @@ async function _onUserLoginImpl(user) {
         await phase2Promise;
     }
 
-    console.log('🔄 Refrescando todas las vistas tras login...');
+    window._platformDataReady = true;
+
+    if ((DB.operations?.length || 0) === 0) {
+        localStorage.removeItem('_dash_metrics_cache');
+    }
+
+    console.log('🔄 Refrescando todas las vistas tras login...', DB.operations?.length || 0, 'operaciones');
     _refreshAllViewsAfterDataLoad();
 
     setTimeout(() => checkAndShowOnboarding(), 1500);
@@ -41098,10 +41122,12 @@ async function saveAccountToSupabase(accountData) {
 
 async function loadAccountsFromSupabase() {
     if (!currentUser) return [];
+    const client = getSupabaseClient();
+    if (!client) return [];
 
     try {
         // Las cuentas son datos pequeños, cargar todas (no afecta mucho Egress)
-        const { data, error } = await supabase
+        const { data, error } = await client
             .from('accounts')
             .select('*')
             .eq('user_id', currentUser.id);
@@ -41741,11 +41767,13 @@ async function saveOperationToSupabase(operationData) {
 // La carga completa (6 meses) se lanza en background justo después.
 async function loadRecentOperationsQuick() {
     if (!currentUser) return [];
+    const client = getSupabaseClient();
+    if (!client) return [];
     try {
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         console.log('⚡ [loadRecentOperationsQuick] Cargando últimos 7 días...');
-        const { data, error } = await supabase
+        const { data, error } = await client
             .from('operations')
             .select('id, account_id, date, instrument, type, entry, exit, entry_time, exit_time, volume, result, pl, currency, notes, fees, commission, manual_pl, session, setup_id, mae, mfe')
             .eq('user_id', currentUser.id)
@@ -41795,26 +41823,27 @@ async function loadOperationsFromSupabase() {
         console.warn('⚠️ [loadOperationsFromSupabase] No hay usuario autenticado');
         return [];
     }
+    const client = getSupabaseClient();
+    if (!client) {
+        console.error('❌ [loadOperationsFromSupabase] Cliente Supabase no disponible');
+        return [];
+    }
 
     try {
         console.log('🔍 [loadOperationsFromSupabase] Consultando operaciones para user_id:', currentUser.id);
-        
-        // Cargar operaciones de los últimos 6 meses con IMÁGENES incluidas
-        // (Plataforma profesional requiere capacidad completa de imágenes)
-        const sixMonthsAgo = new Date();
-        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-        
-        console.log('📅 [loadOperationsFromSupabase] Buscando desde:', sixMonthsAgo.toISOString());
-        
-        // ===== LAZY LOADING: Excluir imágenes del SELECT inicial para reducir egress =====
-        // Las imágenes se cargarán solo cuando se abra el detalle de la operación
-        const { data, error } = await supabase
+
+        const { data: { session } } = await client.auth.getSession();
+        if (!session) {
+            console.error('❌ [loadOperationsFromSupabase] Sin sesión JWT activa');
+            return [];
+        }
+
+        const { data, error } = await client
             .from('operations')
             .select('id, account_id, date, instrument, type, entry, exit, entry_time, exit_time, volume, result, pl, currency, notes, fees, commission, manual_pl, session, setup_id, mae, mfe')
             .eq('user_id', currentUser.id)
-            .gte('date', sixMonthsAgo.toISOString())
             .order('date', { ascending: false })
-            .limit(500); // Limitar a 500 operaciones más recientes
+            .limit(2000);
 
         if (error) {
             console.error('❌ [loadOperationsFromSupabase] Error en consulta Supabase:', error);
@@ -42737,9 +42766,9 @@ async function performFullLogout() {
         if (typeof onUserLogout === 'function') onUserLogout();
         if (typeof clearUserInfo === 'function') clearUserInfo();
 
-        const client = window.supabase || (typeof supabase !== 'undefined' ? supabase : null);
+        const client = getSupabaseClient();
         if (client?.auth) {
-            const { error } = await client.auth.signOut();
+            const { error } = await client.auth.signOut({ scope: 'global' });
             if (error) console.warn('⚠️ signOut:', error.message);
         }
     } catch (err) {
@@ -42748,14 +42777,14 @@ async function performFullLogout() {
 
     try {
         Object.keys(localStorage).forEach(key => {
-            if (key.startsWith('sb-') || key === '_dash_metrics_cache') {
+            if (key.startsWith('sb-') || key.includes('supabase') || key === '_dash_metrics_cache') {
                 localStorage.removeItem(key);
             }
         });
         sessionStorage.clear();
     } catch (_) {}
 
-    window.location.replace('/login');
+    window.location.href = '/login?logout=1';
 }
 
 window.performFullLogout = performFullLogout;
@@ -42801,7 +42830,9 @@ initializeSupabase().then(() => {
             } else if (event === 'SIGNED_OUT') {
                 if (typeof onUserLogout === 'function') onUserLogout();
                 clearUserInfo();
-                window.location.replace('/login');
+                if (!window._logoutInProgress) {
+                    window.location.replace('/login?logout=1');
+                }
             } else if (event === 'INITIAL_SESSION' && session?.user) {
                 // Sesión ya existe al recargar la página
                 console.log('🔄 Sesión existente detectada - Iniciando carga de datos...');
@@ -57738,7 +57769,12 @@ console.log('✅ refreshGraficosCharts definida y disponible globalmente');
 // ===== EXPORTAR FUNCIONES AL ÁMBITO GLOBAL =====
 // Esto permite que el segundo bloque <script> y el resto del código acceda a estas funciones
 window.initializeSupabase = initializeSupabase;
-window.supabase = supabase;
+// NO pisar window.supabase con null — sincronizar desde el módulo de platform.html
+if (window.supabase?.auth) {
+    supabase = window.supabase;
+} else if (supabase?.auth) {
+    window.supabase = supabase;
+}
 window.currentUser = null;
 
 // Funciones de operaciones

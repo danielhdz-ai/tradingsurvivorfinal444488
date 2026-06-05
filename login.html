@@ -1030,10 +1030,20 @@
                        location.hostname.startsWith('192.168.');
     async function checkSession() {
         if (isLocalDev) return;
+
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('logout') === '1') {
+            try {
+                await supabase.auth.signOut({ scope: 'global' });
+            } catch (e) { /* ignore */ }
+            window.history.replaceState({}, '', '/login');
+            return;
+        }
+
         try {
             const { data: { session } } = await supabase.auth.getSession();
             if (session) {
-                window.location.replace('platform.html');
+                window.location.replace('/app');
             }
         } catch (e) { /* ignore */ }
     }
