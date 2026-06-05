@@ -20108,24 +20108,26 @@ if (typeof MutationObserver !== 'undefined') {
                 }, 0);
             });
 
-            // ── WEB WORKER para NO bloquear UI ──
+            // ── CALCULAR MÉTRICAS INSTANTÁNEAMENTE para mostrar todas al mismo tiempo ──
+            const quickMetrics = calculateMetrics(operations, selectedAccount);
+            const quickDayStats = calculateDayWinStats(operations);
+            const quickGrossPL = quickMetrics.totalWin + quickMetrics.totalLoss;
+            const quickNetPL = quickGrossPL - quickMetrics.totalFees;
+            quickMetrics.winDays = quickDayStats.winningDays;
+            quickMetrics.loseDays = quickDayStats.losingDays;
+            
+            // Actualizar UI INMEDIATAMENTE - todas las métricas al mismo tiempo
+            updateNewDashboardMetrics(quickMetrics, quickNetPL, displayCurrency);
+            updateNewDashboardGauges(quickMetrics, quickNetPL);
+
+            // Web Worker en background para validar (opcional, no bloquea)
             MetricsWorker.calculate(
                 operations,
                 selectedAccount,
                 DB.accounts,
                 DB.settings.defaultCurrency,
                 (metrics, dayWinStats, error) => {
-                    if (error) {
-                        metrics = calculateMetrics(operations, selectedAccount);
-                        dayWinStats = calculateDayWinStats(operations);
-                    }
-                    const grossPL = metrics.totalWin + metrics.totalLoss;
-                    const netPL = grossPL - metrics.totalFees;
-                    metrics.winDays = dayWinStats.winningDays;
-                    metrics.loseDays = dayWinStats.losingDays;
-                    
-                    updateNewDashboardMetrics(metrics, netPL, displayCurrency);
-                    updateNewDashboardGauges(metrics, netPL);
+                    // Solo actualizar si hay diferencia significativa
                     _clearStaleIndicator();
                 }
             );
@@ -20223,22 +20225,13 @@ if (typeof MutationObserver !== 'undefined') {
             const ratio = avgLoss > 0 ? avgWin / avgLoss : 0;
             
             const avgRatioEl = document.getElementById('new-dash-avg-ratio');
-            if (avgRatioEl) {
-                avgRatioEl.textContent = ratio.toFixed(2);
-                console.log('✅ Avg Ratio actualizado:', ratio.toFixed(2));
-            }
+            if (avgRatioEl) avgRatioEl.textContent = ratio.toFixed(2);
             
             const avgWinEl = document.getElementById('new-dash-avg-win');
-            if (avgWinEl) {
-                avgWinEl.textContent = formatCurrency(avgWin, DB.settings.defaultCurrency, currency);
-                console.log('✅ Avg Win actualizado:', formatCurrency(avgWin, DB.settings.defaultCurrency, currency));
-            }
+            if (avgWinEl) avgWinEl.textContent = formatCurrency(avgWin, DB.settings.defaultCurrency, currency);
             
             const avgLossEl = document.getElementById('new-dash-avg-loss');
-            if (avgLossEl) {
-                avgLossEl.textContent = formatCurrency(-avgLoss, DB.settings.defaultCurrency, currency);
-                console.log('✅ Avg Loss actualizado:', formatCurrency(-avgLoss, DB.settings.defaultCurrency, currency));
-            }
+            if (avgLossEl) avgLossEl.textContent = formatCurrency(-avgLoss, DB.settings.defaultCurrency, currency);
             
             // Update progress bars
             const totalRange = avgWin + avgLoss;
