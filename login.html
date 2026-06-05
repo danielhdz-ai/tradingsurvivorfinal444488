@@ -465,6 +465,41 @@
             transform: none;
         }
 
+        /* ─── OAUTH BUTTONS ───────────────────────────────── */
+        .btn-oauth {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            background: var(--bg-input);
+            color: var(--text);
+            font-size: 0.9rem;
+            font-weight: 600;
+            border: 1px solid var(--border-soft);
+            cursor: pointer;
+            transition: all 0.25s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .btn-oauth:hover {
+            background: var(--bg-surface);
+            border-color: rgba(255,255,255,0.15);
+            transform: translateY(-1px);
+        }
+
+        .btn-oauth:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-oauth i {
+            font-size: 1.1rem;
+        }
+
         /* ─── DIVIDER ─────────────────────────────────────── */
         .divider {
             display: flex;
@@ -795,6 +830,14 @@
                     <button type="submit" class="btn-submit" id="loginBtn">
                         <i class="fas fa-sign-in-alt"></i> Iniciar Sesión
                     </button>
+
+                    <div class="divider">
+                        <span>o continúa con</span>
+                    </div>
+
+                    <button type="button" class="btn-oauth" onclick="handleGoogleLogin()">
+                        <i class="fab fa-google"></i> Continuar con Google
+                    </button>
                 </form>
 
                 <!-- ──── REGISTER FORM ───────────────────── -->
@@ -829,6 +872,14 @@
 
                     <button type="submit" class="btn-submit" id="registerBtn">
                         <i class="fas fa-user-plus"></i> Crear Cuenta
+                    </button>
+
+                    <div class="divider">
+                        <span>o regístrate con</span>
+                    </div>
+
+                    <button type="button" class="btn-oauth" onclick="handleGoogleLogin()">
+                        <i class="fab fa-google"></i> Continuar con Google
                     </button>
                 </form>
 
@@ -1012,6 +1063,22 @@
             ? '<i class="fas fa-spinner"></i> Cargando...'
             : defaultHTML;
     }
+
+    // ─── GOOGLE OAUTH ─────────────────────────────────────────
+    window.handleGoogleLogin = async function() {
+        try {
+            const { data, error } = await supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: {
+                    redirectTo: window.location.origin + '/platform.html'
+                }
+            });
+            if (error) throw error;
+        } catch (err) {
+            const msg = document.getElementById('authMsg');
+            showMsg(msg, 'Error al conectar con Google. Intenta de nuevo.');
+        }
+    };
 
     // ─── LOGIN ────────────────────────────────────────────────
     window.handleLogin = async function(e) {

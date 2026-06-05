@@ -517,6 +517,62 @@
             transform: none;
         }
 
+        /* ─── OAUTH BUTTONS ───────────────────────────────── */
+        .btn-oauth {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            background: var(--bg-input);
+            color: var(--text);
+            font-size: 0.9rem;
+            font-weight: 600;
+            border: 1px solid var(--border-soft);
+            cursor: pointer;
+            transition: all 0.25s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .btn-oauth:hover {
+            background: var(--bg-surface);
+            border-color: rgba(255,255,255,0.15);
+            transform: translateY(-1px);
+        }
+
+        .btn-oauth:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-oauth i {
+            font-size: 1.1rem;
+        }
+
+        /* ─── DIVIDER ─────────────────────────────────────── */
+        .divider {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 20px 0;
+        }
+
+        .divider::before, .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border-soft);
+        }
+
+        .divider span {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+
         /* ─── SWITCH LINK ─────────────────────────────────── */
         .switch-line {
             text-align: center;
@@ -823,6 +879,14 @@
                     <button type="submit" class="btn-submit" id="submitBtn">
                         <i class="fas fa-shield-alt"></i> Crear Mi Cuenta
                     </button>
+
+                    <div class="divider">
+                        <span>o regístrate con</span>
+                    </div>
+
+                    <button type="button" class="btn-oauth" onclick="handleGoogleRegister()">
+                        <i class="fab fa-google"></i> Continuar con Google
+                    </button>
                 </form>
 
                 <div class="switch-line">
@@ -943,6 +1007,22 @@
             : '<i class="fas fa-shield-alt"></i> Crear Mi Cuenta';
     }
 
+    // ─── GOOGLE OAUTH ────────────────────────────────────────────────────────────
+    window.handleGoogleRegister = async function() {
+        try {
+            const { data, error } = await supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: {
+                    redirectTo: window.location.origin + '/platform.html'
+                }
+            });
+            if (error) throw error;
+        } catch (err) {
+            showMsg('Error al conectar con Google. Intenta de nuevo.');
+        }
+    };
+
+    // ─── HANDLE REGISTER ─────────────────────────────────────────────────────────
     window.handleRegister = async function(e) {
         e.preventDefault();
         hideMsg();
