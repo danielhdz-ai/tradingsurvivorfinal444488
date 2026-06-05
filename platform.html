@@ -16694,8 +16694,9 @@ window.showConfirm = function(message, options = {}) {
         const from = parseNumeric(currentText) || 0;
         const to   = parseNumeric(targetText);
 
-        // No numeric or same value → set directly
-        if (to === null || Math.abs(to - from) < 0.001) {
+        // No numeric, mismo valor, o primera carga desde placeholder → sin animar
+        const isPlaceholder = /^(0\.?0*|[$€£]0)$/.test(currentText.trim());
+        if (to === null || Math.abs(to - from) < 0.001 || (isPlaceholder && to !== 0)) {
             el.textContent = targetText;
             return;
         }

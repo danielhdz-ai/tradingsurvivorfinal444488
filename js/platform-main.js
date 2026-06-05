@@ -5123,6 +5123,8 @@ if (typeof MutationObserver !== 'undefined') {
             // Así el usuario ve sus números reales en ~0ms
             _paintCachedMetrics();
             refreshNewDashboard();
+            window._paintCachedMetrics = _paintCachedMetrics;
+            window.refreshNewDashboard = refreshNewDashboard;
         }
         
         // Debounce timer para evitar múltiples refreshes
@@ -40489,25 +40491,76 @@ async function onUserLogin(user) {
 
     console.log('🔐 Usuario autenticado en onUserLogin:', user.email);
 
-    // Mostrar estado de carga inmediatamente en las métricas del dashboard
-    if (typeof showMetricLoadingState === 'function') showMetricLoadingState();
+    // ── Fase 0: caché local instantáneo (Dexie) ──────────────────────────
+    // Mostrar datos del caché local antes de cualquier petición a red.
+    // Esto hace que las métricas aparezcan en < 100ms en visitas recurrentes.
+    try {
+        const [cachedOps, cachedAccounts, cachedFunded, cachedFinances, cachedSetups] = await Promise.all([
+            window.dexieDB?.operations?.toArray().catch(() => []) || Promise.resolve([]),
+            window.dexieDB?.accounts?.toArray().catch(() => []) || Promise.resolve([]),
+            window.dexieDB?.fundedAccounts?.toArray().catch(() => []) || Promise.resolve([]),
+            window.dexieDB?.finances?.toArray().catch(() => []) || Promise.resolve([]),
+            window.dexieDB?.setups?.toArray().catch(() => []) || Promise.resolve([])
+        ]);
+        if (cachedOps.length > 0) {
+            console.log(`⚡ [Fase 0] Caché local: ${cachedOps.length} operaciones → mostrando métricas al instante`);
+            DB.operations    = cachedOps;
+            DB.accounts      = cachedAccounts.length > 0 ? cachedAccounts : DB.accounts;
+            DB.fundedAccounts = cachedFunded.length > 0 ? cachedFunded : DB.fundedAccounts;
+            DB.finances      = cachedFinances.length > 0 ? cachedFinances : DB.finances;
+            DB.setups        = cachedSetups.length > 0 ? cachedSetups : DB.setups;
+            if (typeof refreshAccountSelector === 'function') refreshAccountSelector();
+            if (typeof _paintCachedMetrics === 'function') _paintCachedMetrics();
+            if (typeof refreshNewDashboard === 'function') refreshNewDashboard();
+            if (typeof _refreshActiveSection === 'function') _refreshActiveSection();
+        } else {
+            // Sin caché: mostrar spinner mientras carga la red
+            if (typeof showMetricLoadingState === 'function') showMetricLoadingState();
+        }
+    } catch (_cacheErr) {
+        if (typeof showMetricLoadingState === 'function') showMetricLoadingState();
+    }
+
+    const localOpsCount = DB.operations?.length || 0;
+
+    // ── Fase 2 en paralelo: historial completo sin esperar Fase 1 ────────
+    const phase2Promise = loadOperationsFromSupabase().then(async (fullOperations) => {
+        if (!fullOperations || fullOperations.length === 0) return;
+        if (fullOperations.length <= (window.DB?.operations?.length || 0)) return;
+
+        console.log(`✅ [Fase 2] ${fullOperations.length} operaciones completas recibidas, actualizando...`);
+        try {
+            window.DB.operations = fullOperations;
+            await window.dexieDB.operations.clear();
+            await window.dexieDB.operations.bulkPut(fullOperations);
+            if (typeof refreshNewDashboard === 'function') refreshNewDashboard();
+            if (typeof refreshAudicion === 'function') refreshAudicion();
+            console.log('✅ [Fase 2] Dashboard actualizado con historial completo');
+        } catch (e) {
+            console.warn('⚠️ [Fase 2] Error actualizando con historial completo:', e.message);
+        }
+    }).catch(e => {
+        console.warn('⚠️ [Fase 2] Error cargando historial completo:', e.message);
+    });
 
     try {
         // ── Fase 1: carga rápida en paralelo ──────────────────────────────
-        // Se incluye checkUserSubscription en el mismo Promise.all para no
-        // bloquear la carga de datos mientras se verifica el plan.
         console.log('📥 [Fase 1] Cargando datos base + suscripción en paralelo...');
-        const [subscription, accounts, recentOperations, fundedAccounts, finances, setups] = await Promise.all([
+        const [subscription, accounts, fundedAccounts, finances, setups] = await Promise.all([
             checkUserSubscription(user.id),
             loadAccountsFromSupabase(),
-            loadRecentOperationsQuick(), // ⚡ Solo últimos 30 días → métricas rápidas
             loadFundedAccountsFromSupabase(),
             loadFinancesFromSupabase(),
             loadSetupsFromSupabase()
         ]);
+
+        // Solo pedir ops recientes a la red si no hay caché local
+        let recentOperations = [];
+        if (localOpsCount === 0) {
+            recentOperations = await loadRecentOperationsQuick();
+        }
         console.log(`✅ Suscripción verificada: ${subscription.plan} (activa: ${subscription.isActive})`);
 
-        // Usar las operaciones recientes como dataset inicial
         const operations = recentOperations;
         
         console.log('📊 Datos recibidos:', {
@@ -40642,20 +40695,24 @@ async function onUserLogin(user) {
             }, 500);
         }
 
-        // Actualizar operaciones
+        // Actualizar operaciones — no sobrescribir caché local con subset de 7 días
         if (operations.length > 0) {
-            console.log('💾 Actualizando DB.operations...');
-            DB.operations = operations;
-            await dexieDB.operations.clear();
-            await dexieDB.operations.bulkPut(operations);
-            console.log('✅ DB.operations actualizado:', DB.operations.length);
-            
-            // ✅ IMPORTANTE: Refrescar Audición inmediatamente después de cargar operaciones
-            if (typeof refreshAudicion === 'function') {
-                console.log('🔄 Refrescando Audición con datos actualizados...');
-                refreshAudicion();
+            const currentCount = DB.operations?.length || 0;
+            if (currentCount === 0 || operations.length > currentCount) {
+                console.log('💾 Actualizando DB.operations...');
+                DB.operations = operations;
+                await dexieDB.operations.clear();
+                await dexieDB.operations.bulkPut(operations);
+                console.log('✅ DB.operations actualizado:', DB.operations.length);
+
+                if (typeof refreshAudicion === 'function') {
+                    console.log('🔄 Refrescando Audición con datos actualizados...');
+                    refreshAudicion();
+                }
+            } else {
+                console.log(`⚡ [Fase 1] Manteniendo ${currentCount} ops locales (red: ${operations.length})`);
             }
-        } else {
+        } else if (localOpsCount === 0) {
             console.warn('⚠️ No se cargaron operaciones desde Supabase. Array vacío recibido.');
             console.log('🔍 Verifica que:');
             console.log('  1. Existan operaciones en la tabla "operations" de Supabase');
@@ -40744,29 +40801,8 @@ async function onUserLogin(user) {
     // Mostrar onboarding si es la primera vez (diferido para no bloquear UI)
     setTimeout(() => checkAndShowOnboarding(), 1500);
 
-    // ── Fase 2 en background: cargar historial completo (6 meses) ────────
-    // Se lanza sin await para no bloquear la UI. Cuando termina, actualiza
-    // silenciosamente las métricas con el histórico completo.
-    console.log('🔄 [Fase 2] Cargando historial completo en background (6 meses)...');
-    loadOperationsFromSupabase().then(async (fullOperations) => {
-        if (!fullOperations || fullOperations.length === 0) return;
-        if (fullOperations.length <= (window.DB?.operations?.length || 0)) return;
-
-        console.log(`✅ [Fase 2] ${fullOperations.length} operaciones completas recibidas, actualizando...`);
-        try {
-            window.DB.operations = fullOperations;
-            await window.dexieDB.operations.clear();
-            await window.dexieDB.operations.bulkPut(fullOperations);
-            // Refrescar solo el dashboard para que las métricas históricas sean correctas
-            if (typeof refreshNewDashboard === 'function') refreshNewDashboard();
-            if (typeof refreshAudicion === 'function') refreshAudicion();
-            console.log('✅ [Fase 2] Dashboard actualizado con historial completo');
-        } catch (e) {
-            console.warn('⚠️ [Fase 2] Error actualizando con historial completo:', e.message);
-        }
-    }).catch(e => {
-        console.warn('⚠️ [Fase 2] Error cargando historial completo:', e.message);
-    });
+    // Fase 2 ya arrancó en paralelo al inicio
+    void phase2Promise;
 }
 
 // Helper: refresca la sección activa del sidebar
