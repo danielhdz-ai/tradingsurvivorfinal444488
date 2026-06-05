@@ -20086,55 +20086,37 @@ if (typeof MutationObserver !== 'undefined') {
                 }, 0);
             });
 
-            // ── OPTIMIZACIÓN: Calcular métricas básicas síncronamente PRIMERO ──
-            // Avg Win/Loss se muestra inmediatamente sin esperar el Web Worker
-            const quickWins = operations.filter(op => (op.pl || 0) > 0);
-            const quickLosses = operations.filter(op => (op.pl || 0) < 0);
-            const quickAvgWin = quickWins.length > 0 
-                ? quickWins.reduce((sum, op) => sum + (op.pl || 0), 0) / quickWins.length 
-                : 0;
-            const quickAvgLoss = quickLosses.length > 0 
-                ? Math.abs(quickLosses.reduce((sum, op) => sum + (op.pl || 0), 0)) / quickLosses.length 
-                : 0;
+            // ── OPTIMIZACIÓN: Calcular TODAS las métricas síncronamente PRIMERO ──
+            // Mostrar valores inmediatamente sin esperar el Web Worker
+            const quickMetrics = calculateMetrics(operations, selectedAccount);
+            const quickDayStats = calculateDayWinStats(operations);
+            const quickGrossPL = quickMetrics.totalWin + quickMetrics.totalLoss;
+            const quickNetPL = quickGrossPL - quickMetrics.totalFees;
+            quickMetrics.winDays = quickDayStats.winningDays;
+            quickMetrics.loseDays = quickDayStats.losingDays;
             
-            // Actualizar Avg Win/Loss inmediatamente
-            const avgWinEl = document.getElementById('new-dash-avg-win');
-            if (avgWinEl) avgWinEl.textContent = formatCurrency(quickAvgWin, DB.settings.defaultCurrency, displayCurrency);
+            console.log('⚡ [Dashboard] Métricas calculadas síncronamente:', {
+                netPL: quickNetPL,
+                winRate: quickMetrics.winRate,
+                profitFactor: quickMetrics.profitFactor,
+                avgWin: quickMetrics.winningTrades > 0 ? quickMetrics.totalWin / quickMetrics.winningTrades : 0,
+                avgLoss: quickMetrics.losingTrades > 0 ? Math.abs(quickMetrics.totalLoss) / quickMetrics.losingTrades : 0,
+                totalTrades: quickMetrics.totalTrades
+            });
             
-            const avgLossEl = document.getElementById('new-dash-avg-loss');
-            if (avgLossEl) avgLossEl.textContent = formatCurrency(-quickAvgLoss, DB.settings.defaultCurrency, displayCurrency);
-            
-            const quickRatio = quickAvgLoss > 0 ? quickAvgWin / quickAvgLoss : 0;
-            const avgRatioEl = document.getElementById('new-dash-avg-ratio');
-            if (avgRatioEl) avgRatioEl.textContent = quickRatio.toFixed(2);
-            
-            // Actualizar barras de progreso
-            const totalRange = quickAvgWin + quickAvgLoss;
-            const winPercent = totalRange > 0 ? (quickAvgWin / totalRange) * 100 : 50;
-            const winBarEl = document.getElementById('new-dash-win-bar');
-            if (winBarEl) winBarEl.style.width = `${winPercent}%`;
-            const lossBarEl = document.getElementById('new-dash-loss-bar');
-            if (lossBarEl) lossBarEl.style.width = `${100 - winPercent}%`;
+            // Actualizar UI inmediatamente con cálculo síncrono
+            updateNewDashboardMetrics(quickMetrics, quickNetPL, displayCurrency);
+            updateNewDashboardGauges(quickMetrics, quickNetPL);
 
-            // ── Métricas calculadas en Web Worker (hilo secundario) ──
-            // Los valores numéricos se actualizan en el callback sin bloquear la UI.
+            // ── Web Worker para cálculos avanzados en segundo plano (opcional) ──
+            // Ya mostramos las métricas síncronamente arriba, el worker es solo para backup
             MetricsWorker.calculate(
                 operations,
                 selectedAccount,
                 DB.accounts,
                 DB.settings.defaultCurrency,
                 (metrics, dayWinStats, error) => {
-                    if (error) {
-                        // Fallback: recalcular síncronamente si el worker falla
-                        metrics     = calculateMetrics(operations, selectedAccount);
-                        dayWinStats = calculateDayWinStats(operations);
-                    }
-                    const grossPL = metrics.totalWin + metrics.totalLoss;
-                    const netPL   = grossPL - metrics.totalFees;
-                    metrics.winDays  = dayWinStats.winningDays;
-                    metrics.loseDays = dayWinStats.losingDays;
-                    updateNewDashboardMetrics(metrics, netPL, displayCurrency);
-                    updateNewDashboardGauges(metrics, netPL);
+                    // Worker terminó - solo actualizar si es diferente (evitar parpadeo)
                     // Quitar indicador de datos obsoletos
                     _clearStaleIndicator();
                 }
