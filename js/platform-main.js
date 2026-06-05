@@ -7,12 +7,26 @@
  * Retorna true si el usuario NO es PRO y debe ver el modal
  * Retorna false si el usuario es PRO o admin
  */
+const ADMIN_EMAILS = ['daniel.hdz.trader@gmail.com', 'danielhernandezhv3@gmail.com'];
+
+function _applyAdminProAccess(user) {
+    if (!user?.email || !ADMIN_EMAILS.includes(user.email)) return;
+    window.userPlan = 'pro';
+    window.userSubscriptionStatus = 'active';
+    document.querySelectorAll('span').forEach(el => {
+        if (el.textContent.trim() === 'PRO') el.style.display = 'none';
+    });
+    const upgradeModal = document.getElementById('upgrade-modal');
+    if (upgradeModal) {
+        upgradeModal.style.display = 'none';
+        upgradeModal.remove();
+    }
+    console.log('👑 Acceso PRO admin aplicado:', user.email);
+}
+
 function shouldShowUpgradeModal() {
-    // Lista de admins que NUNCA deben ver el modal PRO
-    const adminEmails = ['daniel.hdz.trader@gmail.com', 'danielhernandezhv3@gmail.com'];
-    
     // PRIMERA VERIFICACIÓN: Email de admin
-    if (window.currentUser && adminEmails.includes(window.currentUser.email)) {
+    if (window.currentUser && ADMIN_EMAILS.includes(window.currentUser.email)) {
         console.log('🚫 [PRO Modal] Bloqueado para admin:', window.currentUser.email);
         return false;
     }
@@ -1009,14 +1023,9 @@ if (typeof MutationObserver !== 'undefined') {
             }
 
             if (configLogoutBtn) {
-                configLogoutBtn.addEventListener('click', async () => {
-                    try {
-                        await window.supabase.auth.signOut({ scope: 'local' });
-                    } catch (e) {}
-                    localStorage.clear();
-                    sessionStorage.clear();
-                    if (window.indexedDB) indexedDB.deleteDatabase('TradingSurvivorDB');
-                    window.location.replace('/login.html');
+                configLogoutBtn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    await performFullLogout();
                 });
             }
 
@@ -32793,14 +32802,9 @@ if (typeof MutationObserver !== 'undefined') {
 
             const logoutBtnConfig = document.getElementById('logout-btn-config');
             if (logoutBtnConfig) {
-                logoutBtnConfig.addEventListener('click', async () => {
-                    try {
-                        await window.supabase.auth.signOut({ scope: 'local' });
-                    } catch (e) {}
-                    localStorage.clear();
-                    sessionStorage.clear();
-                    if (window.indexedDB) indexedDB.deleteDatabase('TradingSurvivorDB');
-                    window.location.replace('/login.html');
+                logoutBtnConfig.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    await performFullLogout();
                 });
             }
 
@@ -33939,39 +33943,17 @@ if (typeof MutationObserver !== 'undefined') {
                 });
             }
 
-            // Botón de cerrar sesión en header - LOGOUT COMPLETO
+            // Botón de cerrar sesión en header
             const headerLogoutBtn = document.getElementById('header-logout-btn');
-            
             if (headerLogoutBtn) {
                 const newLogoutBtn = headerLogoutBtn.cloneNode(true);
                 headerLogoutBtn.parentNode.replaceChild(newLogoutBtn, headerLogoutBtn);
-                
                 newLogoutBtn.addEventListener('click', async (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    
                     const dropdown = document.getElementById('user-dropdown-menu');
                     if (dropdown) dropdown.style.display = 'none';
-                    
-                    // LOGOUT COMPLETO Y CORRECTO
-                    try {
-                        // 1. Cerrar sesión en Supabase PRIMERO
-                        await window.supabase.auth.signOut({ scope: 'local' });
-                    } catch (e) {
-                        console.warn('Error cerrando sesión Supabase:', e);
-                    }
-                    
-                    // 2. Limpiar TODO el storage
-                    localStorage.clear();
-                    sessionStorage.clear();
-                    
-                    // 3. Limpiar IndexedDB
-                    if (window.indexedDB) {
-                        indexedDB.deleteDatabase('TradingSurvivorDB');
-                    }
-                    
-                    // 4. Redirigir
-                    window.location.replace('/login.html');
+                    await performFullLogout();
                 });
             }
         }
@@ -34159,32 +34141,6 @@ if (typeof MutationObserver !== 'undefined') {
                     e.stopPropagation();
                     showSection('config');
                     if (userDropdown) userDropdown.style.display = 'none';
-                });
-            }
-
-            // Botón de cerrar sesión en header - LOGOUT COMPLETO
-            const headerLogoutBtn = document.getElementById('header-logout-btn');
-            
-            if (headerLogoutBtn) {
-                const newLogoutBtn = headerLogoutBtn.cloneNode(true);
-                headerLogoutBtn.parentNode.replaceChild(newLogoutBtn, headerLogoutBtn);
-                
-                newLogoutBtn.addEventListener('click', async (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    
-                    const dropdown = document.getElementById('user-dropdown-menu');
-                    if (dropdown) dropdown.style.display = 'none';
-                    
-                    try {
-                        await window.supabase.auth.signOut({ scope: 'local' });
-                    } catch (e) {}
-                    
-                    localStorage.clear();
-                    sessionStorage.clear();
-                    if (window.indexedDB) indexedDB.deleteDatabase('TradingSurvivorDB');
-                    
-                    window.location.replace('/login.html');
                 });
             }
 
@@ -40441,8 +40397,7 @@ async function checkUserSubscription(userId) {
     try {
         // El administrador siempre tiene plan PRO sin necesidad de suscripción
         const { data: { user: currentAuthUser } } = await supabase.auth.getUser();
-        const adminEmails = ['daniel.hdz.trader@gmail.com', 'danielhernandezhv3@gmail.com'];
-        if (currentAuthUser && adminEmails.includes(currentAuthUser.email)) {
+        if (currentAuthUser && ADMIN_EMAILS.includes(currentAuthUser.email)) {
             window.userPlan = 'pro';
             window.userSubscriptionStatus = 'active';
             console.log('👑 Plan del usuario: PRO (administrador)');
@@ -40493,11 +40448,24 @@ async function checkUserSubscription(userId) {
     }
 }
 
+// Evita cargas duplicadas (checkAuth + onAuthStateChange disparan a la vez)
+let _userLoginPromise = null;
+
 // Sincronización cuando el usuario se conecta
 async function onUserLogin(user) {
+    if (_userLoginPromise) return _userLoginPromise;
+
+    _userLoginPromise = _onUserLoginImpl(user).finally(() => {
+        _userLoginPromise = null;
+    });
+    return _userLoginPromise;
+}
+
+async function _onUserLoginImpl(user) {
     currentUser = user;
-    window.currentUser = user; // Hacer accesible globalmente
+    window.currentUser = user;
     isAutoSyncEnabled = true;
+    _applyAdminProAccess(user);
 
     console.log('🔐 Usuario autenticado en onUserLogin:', user.email);
 
@@ -40535,16 +40503,19 @@ async function onUserLogin(user) {
 
     // ── Fase 2 en paralelo: historial completo sin esperar Fase 1 ────────
     const phase2Promise = loadOperationsFromSupabase().then(async (fullOperations) => {
-        if (!fullOperations || fullOperations.length === 0) return;
-        if (fullOperations.length <= (window.DB?.operations?.length || 0)) return;
+        if (!fullOperations || fullOperations.length === 0) {
+            console.warn('⚠️ [Fase 2] Sin operaciones desde Supabase');
+            return;
+        }
+        const currentCount = window.DB?.operations?.length || 0;
+        if (fullOperations.length <= currentCount) return;
 
         console.log(`✅ [Fase 2] ${fullOperations.length} operaciones completas recibidas, actualizando...`);
         try {
             window.DB.operations = fullOperations;
             await window.dexieDB.operations.clear();
             await window.dexieDB.operations.bulkPut(fullOperations);
-            if (typeof refreshNewDashboard === 'function') refreshNewDashboard();
-            if (typeof refreshAudicion === 'function') refreshAudicion();
+            _refreshAllViewsAfterDataLoad();
             console.log('✅ [Fase 2] Dashboard actualizado con historial completo');
         } catch (e) {
             console.warn('⚠️ [Fase 2] Error actualizando con historial completo:', e.message);
@@ -40804,15 +40775,27 @@ async function onUserLogin(user) {
     // Quitar estado de carga de métricas
     if (typeof hideMetricLoadingState === 'function') hideMetricLoadingState();
 
-    // Refrescar la vista activa sin delay innecesario
-    console.log('🔄 Refrescando vistas (Fase 1 — últimos 30 días)...');
-    _refreshActiveSection();
+    // Si aún no hay operaciones, esperar a que Fase 2 termine la sincronización
+    if ((DB.operations?.length || 0) === 0) {
+        console.log('⏳ Sin operaciones locales — esperando Fase 2...');
+        await phase2Promise;
+    }
 
-    // Mostrar onboarding si es la primera vez (diferido para no bloquear UI)
+    console.log('🔄 Refrescando todas las vistas tras login...');
+    _refreshAllViewsAfterDataLoad();
+
     setTimeout(() => checkAndShowOnboarding(), 1500);
+}
 
-    // Fase 2 ya arrancó en paralelo al inicio
-    void phase2Promise;
+function _refreshAllViewsAfterDataLoad() {
+    if (typeof refreshAccountSelector === 'function') refreshAccountSelector();
+    if (typeof refreshNewDashboard === 'function') refreshNewDashboard();
+    if (typeof refreshDashboard === 'function') refreshDashboard();
+    if (typeof refreshAnalytics === 'function') refreshAnalytics();
+    if (typeof refreshAudicion === 'function') refreshAudicion();
+    if (typeof refreshChartbook === 'function') refreshChartbook();
+    if (typeof refreshOperations === 'function') refreshOperations();
+    _refreshActiveSection();
 }
 
 // Helper: refresca la sección activa del sidebar
@@ -42376,9 +42359,18 @@ function setupEventListeners() {
         registerForm.addEventListener('submit', handleRegister);
     }
 
-    // Logout
+    // Logout (modal embebido + header)
     if (logoutBtn) {
-        logoutBtn.addEventListener('click', handleLogout);
+        logoutBtn.addEventListener('click', (e) => { e.preventDefault(); handleLogout(); });
+    }
+    const headerLogout = document.getElementById('header-logout-btn');
+    if (headerLogout && !headerLogout.dataset.logoutBound) {
+        headerLogout.dataset.logoutBound = '1';
+        headerLogout.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            await performFullLogout();
+        });
     }
 }
 
@@ -42736,39 +42728,40 @@ async function handleRegister(e) {
     }
 }
 
-async function handleLogout() {
+async function performFullLogout() {
+    if (window._logoutInProgress) return;
+    window._logoutInProgress = true;
+    console.log('🚪 Cerrando sesión...');
+
     try {
-        console.log('🚪 Cerrando sesión...');
+        if (typeof onUserLogout === 'function') onUserLogout();
+        if (typeof clearUserInfo === 'function') clearUserInfo();
 
-        // Verificar que Supabase esté disponible
-        if (!supabase || !supabase.auth) {
-            console.error('❌ Supabase no disponible para logout');
-            clearUserInfo();
-            showAuth();
-            return;
+        const client = window.supabase || (typeof supabase !== 'undefined' ? supabase : null);
+        if (client?.auth) {
+            const { error } = await client.auth.signOut();
+            if (error) console.warn('⚠️ signOut:', error.message);
         }
-        
-        const { error } = await supabase.auth.signOut();
-
-        if (error) throw error;
-
-        clearUserInfo();
-        showAuth(); // Mostrar login después de logout
-
-        // DESACTIVAR SINCRONIZACIÓN AUTOMÁTICA AL HACER LOGOUT
-        onUserLogout();
-
-        // Limpiar formularios
-        loginForm.reset();
-        registerForm.reset();
-        hideMessage();
-
-        console.log('✅ Sesión cerrada exitosamente');
-
-    } catch (error) {
-        console.error('❌ Error cerrando sesión:', error);
-        alert('Error al cerrar sesión: ' + error.message);
+    } catch (err) {
+        console.warn('⚠️ Error cerrando sesión:', err);
     }
+
+    try {
+        Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('sb-') || key === '_dash_metrics_cache') {
+                localStorage.removeItem(key);
+            }
+        });
+        sessionStorage.clear();
+    } catch (_) {}
+
+    window.location.replace('/login');
+}
+
+window.performFullLogout = performFullLogout;
+
+async function handleLogout() {
+    await performFullLogout();
 }
 
 // ===== UTILIDADES =====
@@ -42806,8 +42799,9 @@ initializeSupabase().then(() => {
                     await processPendingInvitation();
                 }
             } else if (event === 'SIGNED_OUT') {
+                if (typeof onUserLogout === 'function') onUserLogout();
                 clearUserInfo();
-                showAuth();
+                window.location.replace('/login');
             } else if (event === 'INITIAL_SESSION' && session?.user) {
                 // Sesión ya existe al recargar la página
                 console.log('🔄 Sesión existente detectada - Iniciando carga de datos...');
