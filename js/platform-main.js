@@ -1008,12 +1008,14 @@ if (typeof MutationObserver !== 'undefined') {
             }
 
             if (configLogoutBtn) {
-                configLogoutBtn.addEventListener('click', async () => {
-                    if (await showConfirm('¿Estás seguro de que deseas cerrar sesión?', { title: 'Cerrar sesión', confirmText: 'Cerrar sesión', cancelText: 'Cancelar', danger: false })) {
-                        await supabase.auth.signOut();
-                        // Redirigir a landing page después de logout
-                        window.location.href = '/';
+                configLogoutBtn.addEventListener('click', () => {
+                    // LOGOUT INMEDIATO
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    if (window.supabase?.auth?.signOut) {
+                        window.supabase.auth.signOut().catch(() => {});
                     }
+                    window.location.replace('/login.html');
                 });
             }
 
@@ -20106,38 +20108,24 @@ if (typeof MutationObserver !== 'undefined') {
                 }, 0);
             });
 
-            // ── OPTIMIZACIÓN: Calcular TODAS las métricas síncronamente PRIMERO ──
-            // Mostrar valores inmediatamente sin esperar el Web Worker
-            const quickMetrics = calculateMetrics(operations, selectedAccount);
-            const quickDayStats = calculateDayWinStats(operations);
-            const quickGrossPL = quickMetrics.totalWin + quickMetrics.totalLoss;
-            const quickNetPL = quickGrossPL - quickMetrics.totalFees;
-            quickMetrics.winDays = quickDayStats.winningDays;
-            quickMetrics.loseDays = quickDayStats.losingDays;
-            
-            console.log('⚡ [Dashboard] Métricas calculadas síncronamente:', {
-                netPL: quickNetPL,
-                winRate: quickMetrics.winRate,
-                profitFactor: quickMetrics.profitFactor,
-                avgWin: quickMetrics.winningTrades > 0 ? quickMetrics.totalWin / quickMetrics.winningTrades : 0,
-                avgLoss: quickMetrics.losingTrades > 0 ? Math.abs(quickMetrics.totalLoss) / quickMetrics.losingTrades : 0,
-                totalTrades: quickMetrics.totalTrades
-            });
-            
-            // Actualizar UI inmediatamente con cálculo síncrono
-            updateNewDashboardMetrics(quickMetrics, quickNetPL, displayCurrency);
-            updateNewDashboardGauges(quickMetrics, quickNetPL);
-
-            // ── Web Worker para cálculos avanzados en segundo plano (opcional) ──
-            // Ya mostramos las métricas síncronamente arriba, el worker es solo para backup
+            // ── WEB WORKER para NO bloquear UI ──
             MetricsWorker.calculate(
                 operations,
                 selectedAccount,
                 DB.accounts,
                 DB.settings.defaultCurrency,
                 (metrics, dayWinStats, error) => {
-                    // Worker terminó - solo actualizar si es diferente (evitar parpadeo)
-                    // Quitar indicador de datos obsoletos
+                    if (error) {
+                        metrics = calculateMetrics(operations, selectedAccount);
+                        dayWinStats = calculateDayWinStats(operations);
+                    }
+                    const grossPL = metrics.totalWin + metrics.totalLoss;
+                    const netPL = grossPL - metrics.totalFees;
+                    metrics.winDays = dayWinStats.winningDays;
+                    metrics.loseDays = dayWinStats.losingDays;
+                    
+                    updateNewDashboardMetrics(metrics, netPL, displayCurrency);
+                    updateNewDashboardGauges(metrics, netPL);
                     _clearStaleIndicator();
                 }
             );
@@ -32791,10 +32779,11 @@ if (typeof MutationObserver !== 'undefined') {
 
             const logoutBtnConfig = document.getElementById('logout-btn-config');
             if (logoutBtnConfig) {
-                logoutBtnConfig.addEventListener('click', async () => {
-                    if (await showConfirm('¿Está seguro de que desea cerrar sesión? Sus datos locales se mantendrán.', { title: 'Cerrar sesión', confirmText: 'Cerrar sesión', danger: false })) {
-                        await handleLogout();
-                    }
+                logoutBtnConfig.addEventListener('click', () => {
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    if (window.supabase?.auth?.signOut) window.supabase.auth.signOut().catch(() => {});
+                    window.location.replace('/login.html');
                 });
             }
 
@@ -33933,46 +33922,35 @@ if (typeof MutationObserver !== 'undefined') {
                 });
             }
 
-            // Botón de cerrar sesión en header
+            // Botón de cerrar sesión en header - SIMPLIFICADO PARA SIEMPRE FUNCIONAR
             const headerLogoutBtn = document.getElementById('header-logout-btn');
-            console.log('🔍 Buscando botón logout:', headerLogoutBtn);
             
             if (headerLogoutBtn) {
-                console.log('✅ Botón logout encontrado, agregando listener');
-                
-                // Remover listeners previos si existen
+                // Remover listeners previos
                 const newLogoutBtn = headerLogoutBtn.cloneNode(true);
                 headerLogoutBtn.parentNode.replaceChild(newLogoutBtn, headerLogoutBtn);
                 
-                newLogoutBtn.addEventListener('click', async (e) => {
+                newLogoutBtn.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     
-                    console.log('🚪 Logout clicked');
-                    
+                    // Cerrar dropdown
                     const dropdown = document.getElementById('user-dropdown-menu');
                     if (dropdown) dropdown.style.display = 'none';
                     
-                    // Confirmación simple con confirm nativo
-                    if (confirm('¿Estás seguro de que deseas cerrar sesión?')) {
-                        console.log('✅ Confirmado - cerrando sesión...');
-                        try {
-                            await window.supabase.auth.signOut();
-                            console.log('✅ Sesión cerrada - redirigiendo...');
-                            window.location.href = '/login.html';
-                        } catch (error) {
-                            console.error('❌ Error al cerrar sesión:', error);
-                            alert('Error al cerrar sesión. Redirigiendo...');
-                            window.location.href = '/login.html';
-                        }
-                    } else {
-                        console.log('❌ Logout cancelado');
+                    // LOGOUT INMEDIATO - sin esperar confirmación ni Supabase
+                    // Limpiar TODO
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    
+                    // Intentar cerrar sesión Supabase (no esperar si falla)
+                    if (window.supabase?.auth?.signOut) {
+                        window.supabase.auth.signOut().catch(() => {});
                     }
+                    
+                    // Redirigir INMEDIATAMENTE
+                    window.location.replace('/login.html');
                 });
-                
-                console.log('✅ Listener de logout agregado correctamente');
-            } else {
-                console.error('❌ No se encontró el botón header-logout-btn');
             }
         }
 
@@ -34162,49 +34140,30 @@ if (typeof MutationObserver !== 'undefined') {
                 });
             }
 
-            // Botón de cerrar sesión en header
+            // Botón de cerrar sesión en header - SIMPLIFICADO
             const headerLogoutBtn = document.getElementById('header-logout-btn');
-            console.log('🔍 Buscando botón logout:', headerLogoutBtn);
             
             if (headerLogoutBtn) {
-                console.log('✅ Botón logout encontrado, agregando listener');
-                
-                // Remover listeners previos si existen
+                // Remover listeners previos
                 const newLogoutBtn = headerLogoutBtn.cloneNode(true);
                 headerLogoutBtn.parentNode.replaceChild(newLogoutBtn, headerLogoutBtn);
                 
-                newLogoutBtn.addEventListener('click', async (e) => {
-                    console.log('🖱️ Click en botón logout detectado');
+                newLogoutBtn.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     
-                    // Cerrar el dropdown
+                    // Cerrar dropdown
                     const dropdown = document.getElementById('user-dropdown-menu');
-                    if (dropdown) {
-                        console.log('🔽 Cerrando dropdown');
-                        dropdown.style.display = 'none';
-                    }
+                    if (dropdown) dropdown.style.display = 'none';
                     
-                    // Confirmación simple con confirm nativo
-                    if (confirm('¿Estás seguro de que deseas cerrar sesión?')) {
-                        console.log('✅ Confirmado - cerrando sesión...');
-                        try {
-                            await window.supabase.auth.signOut();
-                            console.log('✅ Sesión cerrada - redirigiendo...');
-                            window.location.href = '/login.html';
-                        } catch (error) {
-                            console.error('❌ Error al cerrar sesión:', error);
-                            alert('Error al cerrar sesión. Redirigiendo...');
-                            window.location.href = '/login.html';
-                        }
-                    } else {
-                        console.log('❌ Logout cancelado');
+                    // LOGOUT INMEDIATO
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    if (window.supabase?.auth?.signOut) {
+                        window.supabase.auth.signOut().catch(() => {});
                     }
+                    window.location.replace('/login.html');
                 });
-                
-                console.log('✅ Listener de logout agregado correctamente');
-            } else {
-                console.error('❌ No se encontró el botón header-logout-btn');
             }
 
             // No actualizar logo al iniciar - debe estar oculto hasta que se seleccione una cuenta
