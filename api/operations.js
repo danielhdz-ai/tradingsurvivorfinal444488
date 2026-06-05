@@ -49,7 +49,7 @@ export default async function handler(req, res) {
                 .eq('user_id', user.id)
                 .order('date', { ascending: false })
                 .limit(Math.min(parseInt(limit) || 2000, 5000));
-            if (accountId) query = query.eq('accountId', accountId);
+            if (accountId) query = query.eq('account_id', accountId);
             if (from)      query = query.gte('date', from);
             if (to)        query = query.lte('date', to);
             const { data, error } = await query;

@@ -1867,7 +1867,11 @@ function renderEconomicCalendar() {
         const newsFilter = document.getElementById('news-sector-filter');
         if (newsFilter) {
             newsFilter.addEventListener('change', function() {
-                renderLatestNews(this.value);
+                if (typeof renderLatestNews === 'function') {
+                    renderLatestNews(this.value);
+                } else {
+                    console.warn('[Market Scanner] renderLatestNews no está definida aún.');
+                }
             });
         }
 

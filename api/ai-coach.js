@@ -57,6 +57,17 @@ export default async function handler(req, res) {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) return res.status(401).json({ error: 'Token inválido' });
 
+    // Verificar plan PRO en servidor
+    const { data: sub } = await supabase
+        .from('subscriptions')
+        .select('plan, status')
+        .eq('user_id', user.id)
+        .maybeSingle();
+    const isPro = sub && sub.plan === 'pro' && sub.status === 'active';
+    if (!isPro) {
+        return res.status(403).json({ error: 'El AI Coach requiere plan Pro. Actualiza tu suscripción.' });
+    }
+
     // Rate limiting por usuario (persistente en Supabase)
     if (!await checkRateLimit(user.id)) {
         return res.status(429).json({ error: 'Demasiadas solicitudes. Intenta de nuevo en una hora.' });

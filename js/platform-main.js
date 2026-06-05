@@ -35293,12 +35293,19 @@ if (typeof MutationObserver !== 'undefined') {
 
         // Renderiza markdown básico a HTML para los mensajes del coach
         function aiCoachRenderMarkdown(text) {
+            const escapeHtml = s => s
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+
             const lines = text.split('\n');
             let html = '';
             let listOpen = false;
             let listOrdered = false;
 
-            const inline = t => t
+            const inline = t => escapeHtml(t)
                 .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
                 .replace(/\*(.+?)\*/g, '<em>$1</em>')
                 .replace(/`(.+?)`/g, '<code class="coach-code">$1</code>');
@@ -35572,7 +35579,8 @@ if (typeof MutationObserver !== 'undefined') {
             const div = document.createElement('div');
             div.className = `ai-msg ${role}`;
             const icon = role === 'assistant' ? '<i class="fas fa-robot"></i>' : '<i class="fas fa-user"></i>';
-            const content = role === 'assistant' ? aiCoachRenderMarkdown(text) : `<p>${text.replace(/\n/g, '<br>')}</p>`;
+            const escapeHtml = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+            const content = role === 'assistant' ? aiCoachRenderMarkdown(text) : `<p>${escapeHtml(text).replace(/\n/g, '<br>')}</p>`;
             div.innerHTML = `<div class="ai-msg-avatar">${icon}</div><div class="ai-msg-bubble">${content}</div>`;
             container.appendChild(div);
             container.scrollTop = container.scrollHeight;
@@ -42466,11 +42474,14 @@ async function checkAuth() {
                 initialized = await initializeSupabase();
             }
             
-            // Si aún falla, permitir usar la app en modo local sin autenticación
+            // Si aún falla, redirigir a login (en producción no se permite acceso sin auth)
             if (!initialized) {
-                console.warn('⚠️ Supabase no disponible - modo local activado');
-                console.log('✅ Permitiendo acceso sin autenticación');
-                hideAuth(); // OCULTAR el modal de login
+                console.warn('⚠️ Supabase no disponible');
+                if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                    window.location.replace('/login');
+                    return;
+                }
+                hideAuth();
                 clearUserInfo();
                 onUserLogout();
                 return;
@@ -42479,8 +42490,12 @@ async function checkAuth() {
         
         // Verificar que auth esté disponible
         if (!supabase || !supabase.auth) {
-            console.warn('⚠️ Supabase auth no disponible - modo local');
-            hideAuth(); // OCULTAR el modal de login
+            console.warn('⚠️ Supabase auth no disponible');
+            if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                window.location.replace('/login');
+                return;
+            }
+            hideAuth();
             clearUserInfo();
             onUserLogout();
             return;
@@ -42491,7 +42506,11 @@ async function checkAuth() {
 
         if (error) {
             console.error('❌ Error al verificar sesión:', error);
-            hideAuth(); // Permitir acceso sin autenticación
+            if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                window.location.replace('/login');
+                return;
+            }
+            hideAuth();
             clearUserInfo();
             onUserLogout();
             return;
@@ -42509,15 +42528,22 @@ async function checkAuth() {
             await onUserLogin(session.user);
 
         } else {
-            console.log('⚠️ No hay sesión activa - pero permitiendo acceso');
+            console.log('⚠️ No hay sesión activa - redirigiendo a login');
+            if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                window.location.replace('/login');
+                return;
+            }
             clearUserInfo();
-            hideAuth(); // CAMBIO: No mostrar login, permitir acceso
+            hideAuth();
             onUserLogout();
         }
     } catch (error) {
         console.error('❌ Error verificando autenticación:', error);
-        console.log('✅ Permitiendo acceso a pesar del error');
-        hideAuth(); // CAMBIO: No bloquear acceso por errores técnicos
+        if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+            window.location.replace('/login');
+            return;
+        }
+        hideAuth();
         clearUserInfo();
         onUserLogout();
     }

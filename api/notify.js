@@ -44,6 +44,10 @@ export default async function handler(req, res) {
         return res.status(429).json({ error: 'Demasiadas solicitudes. Intenta más tarde.' });
     }
 
+    // Verificar JWT para todos los tipos que requieren identidad
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
     const { type, email, userId, crypto, amount, address } = req.body || {};
 
     if (!type || !email) {
@@ -55,6 +59,18 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Email inválido' });
     }
 
+    // ── Registro nuevo: verificar JWT para evitar spam al admin ──────────────
+    if (type === 'register') {
+        if (!token) return res.status(401).json({ error: 'No autenticado' });
+        const { data: { user: authUser }, error: authErr } = await supabase.auth.getUser(token);
+        if (authErr || !authUser) return res.status(401).json({ error: 'Token inválido' });
+        if (authUser.email?.toLowerCase() !== email.toLowerCase()) {
+            return res.status(403).json({ error: 'No autorizado' });
+        }
+        await notifyNewRegister({ email, userId: authUser.id, timestamp: Date.now() });
+        return res.status(200).json({ ok: true });
+    }
+
     // Para tipo 'crypto': verificar que el userId existe en Supabase
     // para prevenir avisos de pago fraudulentos con emails ajenos
     if (type === 'crypto' && userId) {
@@ -62,12 +78,6 @@ export default async function handler(req, res) {
         if (!userCheck?.user || userCheck.user.email?.toLowerCase() !== email.toLowerCase()) {
             return res.status(403).json({ error: 'No autorizado' });
         }
-    }
-
-    // ── Registro nuevo ────────────────────────────────────────────────────────
-    if (type === 'register') {
-        await notifyNewRegister({ email, userId, timestamp: Date.now() });
-        return res.status(200).json({ ok: true });
     }
 
     // ── Aviso pago cripto ─────────────────────────────────────────────────────
