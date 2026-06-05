@@ -9371,13 +9371,13 @@ if (typeof MutationObserver !== 'undefined') {
                         }
                         
                         // Validar que la duración sea razonable (menos de 7 días)
-                        if (duration > 0 && duration < 10080) { // 10080 minutos = 7 días
+                        if (duration >= 0 && duration < 10080) { // 10080 minutos = 7 días
                             if (op.result === 'win') {
                                 winDurations.push(duration);
                             } else if (op.result === 'loss') {
                                 lossDurations.push(duration);
                             }
-                        } else {
+                        } else if (duration < 0 || duration >= 10080) {
                             console.warn('⚠️ Duración fuera de rango:', duration, 'minutos', op);
                         }
                     } catch (e) { 
