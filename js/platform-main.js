@@ -40463,34 +40463,14 @@ async function checkUserSubscription(userId) {
 let _userLoginPromise = null;
 let _authSessionHandled = false;
 
-async function waitForAuthSession(maxMs = 2000) {
+async function resolveAuthSession() {
     const client = getSupabaseClient();
     if (!client?.auth) return null;
-
-    const { data: { session } } = await client.auth.getSession();
+    let { data: { session } } = await client.auth.getSession();
     if (session?.user) return session;
-
-    return new Promise((resolve) => {
-        let sub = null;
-        const timer = setTimeout(async () => {
-            sub?.unsubscribe();
-            const { data: { session: late } } = await client.auth.getSession();
-            resolve(late?.user ? late : null);
-        }, maxMs);
-
-        const { data: { subscription } } = client.auth.onAuthStateChange((event, sess) => {
-            if (event === 'INITIAL_SESSION') {
-                clearTimeout(timer);
-                subscription.unsubscribe();
-                resolve(sess?.user ? sess : null);
-            } else if (event === 'SIGNED_IN' && sess?.user) {
-                clearTimeout(timer);
-                subscription.unsubscribe();
-                resolve(sess);
-            }
-        });
-        sub = subscription;
-    });
+    await new Promise(r => setTimeout(r, 800));
+    ({ data: { session } } = await client.auth.getSession());
+    return session?.user ? session : null;
 }
 
 // Sincronización cuando el usuario se conecta
@@ -42722,7 +42702,7 @@ async function checkAuth() {
             return;
         }
         
-        const session = await waitForAuthSession();
+        const session = await resolveAuthSession();
 
         console.log('🔐 Sesión:', session?.user ? 'Activa' : 'No activa');
 
