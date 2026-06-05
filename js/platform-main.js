@@ -1,4 +1,25 @@
 /* ═══════════════════════════════════════════════════════════════
+   🔒 HELPER DE VERIFICACIÓN DE PLAN
+   ═══════════════════════════════════════════════════════════════ */
+
+/**
+ * Verifica si se debe mostrar el modal de upgrade PRO
+ * Retorna true si el usuario NO es PRO y debe ver el modal
+ * Retorna false si el usuario es PRO o admin
+ */
+function shouldShowUpgradeModal() {
+    // Si ya está verificado que es PRO, no mostrar
+    if (window.userPlan === 'pro') return false;
+    
+    // Si es admin por email, nunca mostrar
+    const adminEmails = ['daniel.hdz.trader@gmail.com', 'danielhernandezhv3@gmail.com'];
+    if (window.currentUser && adminEmails.includes(window.currentUser.email)) return false;
+    
+    // Si no es PRO ni admin, mostrar
+    return true;
+}
+
+/* ═══════════════════════════════════════════════════════════════
    ⏳ SISTEMA DE LOADING & SKELETON LOADERS
    ═══════════════════════════════════════════════════════════════ */
 
@@ -20065,6 +20086,36 @@ if (typeof MutationObserver !== 'undefined') {
                 }, 0);
             });
 
+            // ── OPTIMIZACIÓN: Calcular métricas básicas síncronamente PRIMERO ──
+            // Avg Win/Loss se muestra inmediatamente sin esperar el Web Worker
+            const quickWins = operations.filter(op => (op.pl || 0) > 0);
+            const quickLosses = operations.filter(op => (op.pl || 0) < 0);
+            const quickAvgWin = quickWins.length > 0 
+                ? quickWins.reduce((sum, op) => sum + (op.pl || 0), 0) / quickWins.length 
+                : 0;
+            const quickAvgLoss = quickLosses.length > 0 
+                ? Math.abs(quickLosses.reduce((sum, op) => sum + (op.pl || 0), 0)) / quickLosses.length 
+                : 0;
+            
+            // Actualizar Avg Win/Loss inmediatamente
+            const avgWinEl = document.getElementById('new-dash-avg-win');
+            if (avgWinEl) avgWinEl.textContent = formatCurrency(quickAvgWin, DB.settings.defaultCurrency, displayCurrency);
+            
+            const avgLossEl = document.getElementById('new-dash-avg-loss');
+            if (avgLossEl) avgLossEl.textContent = formatCurrency(-quickAvgLoss, DB.settings.defaultCurrency, displayCurrency);
+            
+            const quickRatio = quickAvgLoss > 0 ? quickAvgWin / quickAvgLoss : 0;
+            const avgRatioEl = document.getElementById('new-dash-avg-ratio');
+            if (avgRatioEl) avgRatioEl.textContent = quickRatio.toFixed(2);
+            
+            // Actualizar barras de progreso
+            const totalRange = quickAvgWin + quickAvgLoss;
+            const winPercent = totalRange > 0 ? (quickAvgWin / totalRange) * 100 : 50;
+            const winBarEl = document.getElementById('new-dash-win-bar');
+            if (winBarEl) winBarEl.style.width = `${winPercent}%`;
+            const lossBarEl = document.getElementById('new-dash-loss-bar');
+            if (lossBarEl) lossBarEl.style.width = `${100 - winPercent}%`;
+
             // ── Métricas calculadas en Web Worker (hilo secundario) ──
             // Los valores numéricos se actualizan en el callback sin bloquear la UI.
             MetricsWorker.calculate(
@@ -23664,7 +23715,7 @@ if (typeof MutationObserver !== 'undefined') {
             const editingId = formContainer.dataset.editingId;
 
             // Límite plan free: máximo 20 operaciones al crear (no al editar)
-            if (!editingId && window.userPlan !== 'pro') {
+            if (!editingId && shouldShowUpgradeModal()) {
                 if (DB.operations.length >= 20) {
                     showLoading(false);
                     const m = document.getElementById('upgrade-modal');
@@ -25676,7 +25727,7 @@ if (typeof MutationObserver !== 'undefined') {
                 const accountType = document.getElementById('acc-type-modal').value; // Capital Propio o Fondeo
                 
                 // Límite plan free: máximo 2 cuentas
-                if (window.userPlan !== 'pro' && DB.accounts.length >= 2) {
+                if (shouldShowUpgradeModal() && DB.accounts.length >= 2) {
                     showLoading(false);
                     const m = document.getElementById('upgrade-modal');
                     if (m) m.style.display = 'flex';
@@ -25889,7 +25940,7 @@ if (typeof MutationObserver !== 'undefined') {
             if (!name || isNaN(initialBalance) || initialBalance < 0) { alert('Nombre y balance inicial válido requerido.'); showLoading(false); return; }
 
             // Límite plan free: máximo 2 cuentas al crear (no al editar)
-            if (!editingId && window.userPlan !== 'pro') {
+            if (!editingId && shouldShowUpgradeModal()) {
                 if (DB.accounts.length >= 2) {
                     showLoading(false);
                     const m = document.getElementById('upgrade-modal');
@@ -33074,7 +33125,7 @@ if (typeof MutationObserver !== 'undefined') {
         function showSection(sectionId) {
             // ── Paywall: secciones exclusivas PRO (Informe es libre) ──
             const _proSections = ['analytics','equity-graph','chartbook','playbook','notebook','funded','finances','audicion','social-media','market-scanner','ai-coach'];
-            if (_proSections.includes(sectionId) && window.userPlan !== 'pro') {
+            if (_proSections.includes(sectionId) && shouldShowUpgradeModal()) {
                 const m = document.getElementById('upgrade-modal');
                 if (m) m.style.display = 'flex';
                 return;
