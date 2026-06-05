@@ -8,14 +8,23 @@
  * Retorna false si el usuario es PRO o admin
  */
 function shouldShowUpgradeModal() {
-    // Si ya está verificado que es PRO, no mostrar
-    if (window.userPlan === 'pro') return false;
-    
-    // Si es admin por email, nunca mostrar
+    // Lista de admins que NUNCA deben ver el modal PRO
     const adminEmails = ['daniel.hdz.trader@gmail.com', 'danielhernandezhv3@gmail.com'];
-    if (window.currentUser && adminEmails.includes(window.currentUser.email)) return false;
     
-    // Si no es PRO ni admin, mostrar
+    // PRIMERA VERIFICACIÓN: Email de admin
+    if (window.currentUser && adminEmails.includes(window.currentUser.email)) {
+        console.log('🚫 [PRO Modal] Bloqueado para admin:', window.currentUser.email);
+        return false;
+    }
+    
+    // SEGUNDA VERIFICACIÓN: Plan PRO verificado
+    if (window.userPlan === 'pro') {
+        console.log('✅ [PRO Modal] Usuario tiene plan PRO');
+        return false;
+    }
+    
+    // Si no es admin ni PRO, permitir mostrar modal
+    console.log('⚠️ [PRO Modal] Usuario free - modal permitido');
     return true;
 }
 
@@ -25710,6 +25719,11 @@ if (typeof MutationObserver !== 'undefined') {
                 
                 // Límite plan free: máximo 2 cuentas
                 if (shouldShowUpgradeModal() && DB.accounts.length >= 2) {
+                    console.warn('🚨 [PRO Modal] Intentando mostrar por límite de cuentas:', {
+                        cuentas: DB.accounts.length,
+                        userPlan: window.userPlan,
+                        userEmail: window.currentUser?.email
+                    });
                     showLoading(false);
                     const m = document.getElementById('upgrade-modal');
                     if (m) m.style.display = 'flex';
@@ -25924,6 +25938,11 @@ if (typeof MutationObserver !== 'undefined') {
             // Límite plan free: máximo 2 cuentas al crear (no al editar)
             if (!editingId && shouldShowUpgradeModal()) {
                 if (DB.accounts.length >= 2) {
+                    console.warn('🚨 [PRO Modal] Intentando mostrar por límite de cuentas (2do check):', {
+                        cuentas: DB.accounts.length,
+                        userPlan: window.userPlan,
+                        userEmail: window.currentUser?.email
+                    });
                     showLoading(false);
                     const m = document.getElementById('upgrade-modal');
                     if (m) m.style.display = 'flex';
@@ -33108,6 +33127,11 @@ if (typeof MutationObserver !== 'undefined') {
             // ── Paywall: secciones exclusivas PRO (Informe es libre) ──
             const _proSections = ['analytics','equity-graph','chartbook','playbook','notebook','funded','finances','audicion','social-media','market-scanner','ai-coach'];
             if (_proSections.includes(sectionId) && shouldShowUpgradeModal()) {
+                console.warn('🚨 [PRO Modal] Intentando mostrar por sección PRO:', {
+                    seccion: sectionId,
+                    userPlan: window.userPlan,
+                    userEmail: window.currentUser?.email
+                });
                 const m = document.getElementById('upgrade-modal');
                 if (m) m.style.display = 'flex';
                 return;
@@ -40408,10 +40432,20 @@ async function checkUserSubscription(userId) {
             window.userPlan = 'pro';
             window.userSubscriptionStatus = 'active';
             console.log('👑 Plan del usuario: PRO (administrador)');
+            
             // Ocultar los badges PRO del sidebar para el admin
             document.querySelectorAll('span').forEach(el => {
                 if (el.textContent.trim() === 'PRO') el.style.display = 'none';
             });
+            
+            // FORZAR ocultación del modal PRO para admins
+            const upgradeModal = document.getElementById('upgrade-modal');
+            if (upgradeModal) {
+                upgradeModal.style.display = 'none';
+                upgradeModal.remove(); // Eliminarlo completamente del DOM
+                console.log('✅ Modal PRO eliminado del DOM para admin');
+            }
+            
             return { plan: 'pro', status: 'active', isActive: true };
         }
 
