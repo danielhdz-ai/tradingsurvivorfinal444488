@@ -272,7 +272,7 @@
                     <a href="#" id="header-config-btn">
                         <i class="fas fa-cog"></i>Configuración
                     </a>
-                    <a href="/login?logout=1" id="header-logout-btn" class="logout-link" onclick="event.preventDefault(); if(window.performFullLogout) window.performFullLogout();">
+                    <a href="/logout.html" id="header-logout-btn" class="logout-link">
                         <i class="fas fa-sign-out-alt"></i>Cerrar Sesión
                     </a>
                 </div>
@@ -10585,9 +10585,9 @@
                                         <p class="text-sm mt-1">Usuario: <span id="config-current-user-email"></span></p>
                                         <p class="text-xs mt-1">Datos sincronizados automáticamente</p>
                                     </div>
-                                    <button id="config-logout-btn" class="btn-danger mt-3">
+                                    <a href="/logout.html" id="config-logout-btn" class="btn-danger mt-3" style="display:inline-block;text-decoration:none;text-align:center;">
                                         <i class="fas fa-sign-out-alt mr-2"></i>Cerrar Sesión
-                                    </button>
+                                    </a>
                                 </div>
                             </div>
                         </div>

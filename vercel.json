@@ -36,6 +36,8 @@
     { "source": "/api/health",            "destination": "/api/health.js" },
     { "source": "/terminos",           "destination": "/terminos.html" },
     { "source": "/privacidad",          "destination": "/privacidad.html" },
+    { "source": "/logout",                 "destination": "/logout.html" },
+    { "source": "/platform",               "destination": "/platform.html" },
     { "source": "/app",                    "destination": "/platform.html" },
     { "source": "/admin",                  "destination": "/admin.html" },
     { "source": "/login",                  "destination": "/login.html" },

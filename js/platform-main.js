@@ -1022,7 +1022,7 @@ if (typeof MutationObserver !== 'undefined') {
                 });
             }
 
-            if (configLogoutBtn) {
+            if (configLogoutBtn && configLogoutBtn.tagName !== 'A') {
                 configLogoutBtn.addEventListener('click', async (e) => {
                     e.preventDefault();
                     await performFullLogout();
@@ -40461,6 +40461,37 @@ async function checkUserSubscription(userId) {
 
 // Evita cargas duplicadas (checkAuth + onAuthStateChange disparan a la vez)
 let _userLoginPromise = null;
+let _authSessionHandled = false;
+
+async function waitForAuthSession(maxMs = 2000) {
+    const client = getSupabaseClient();
+    if (!client?.auth) return null;
+
+    const { data: { session } } = await client.auth.getSession();
+    if (session?.user) return session;
+
+    return new Promise((resolve) => {
+        let sub = null;
+        const timer = setTimeout(async () => {
+            sub?.unsubscribe();
+            const { data: { session: late } } = await client.auth.getSession();
+            resolve(late?.user ? late : null);
+        }, maxMs);
+
+        const { data: { subscription } } = client.auth.onAuthStateChange((event, sess) => {
+            if (event === 'INITIAL_SESSION') {
+                clearTimeout(timer);
+                subscription.unsubscribe();
+                resolve(sess?.user ? sess : null);
+            } else if (event === 'SIGNED_IN' && sess?.user) {
+                clearTimeout(timer);
+                subscription.unsubscribe();
+                resolve(sess);
+            }
+        });
+        sub = subscription;
+    });
+}
 
 // Sincronización cuando el usuario se conecta
 async function onUserLogin(user) {
@@ -40510,10 +40541,11 @@ async function _onUserLoginImpl(user) {
             if (typeof refreshNewDashboard === 'function') refreshNewDashboard();
             if (typeof _refreshActiveSection === 'function') _refreshActiveSection();
         } else {
-            // Sin caché: mostrar spinner mientras carga la red
+            localStorage.removeItem('_dash_metrics_cache');
             if (typeof showMetricLoadingState === 'function') showMetricLoadingState();
         }
     } catch (_cacheErr) {
+        localStorage.removeItem('_dash_metrics_cache');
         if (typeof showMetricLoadingState === 'function') showMetricLoadingState();
     }
 
@@ -40521,25 +40553,34 @@ async function _onUserLoginImpl(user) {
 
     // ── Fase 2 en paralelo: historial completo sin esperar Fase 1 ────────
     const phase2Promise = loadOperationsFromSupabase().then(async (fullOperations) => {
-        if (!fullOperations || fullOperations.length === 0) {
-            console.warn('⚠️ [Fase 2] Sin operaciones desde Supabase');
+        if (!fullOperations?.length) {
+            const synced = await _bulkSyncDexieToCloud();
+            if (synced > 0) {
+                fullOperations = await _loadOperationsViaAPI();
+            }
+        }
+        if (!fullOperations?.length) {
+            console.warn('⚠️ [Fase 2] Sin operaciones en la nube');
+            _showDataLoadBanner('warn', 'No se encontraron operaciones en la nube. Si tenías datos en otro navegador, ábrelos ahí para sincronizar.');
             return;
         }
         const currentCount = window.DB?.operations?.length || 0;
-        if (fullOperations.length <= currentCount) return;
-
-        console.log(`✅ [Fase 2] ${fullOperations.length} operaciones completas recibidas, actualizando...`);
-        try {
-            window.DB.operations = fullOperations;
-            await window.dexieDB.operations.clear();
-            await window.dexieDB.operations.bulkPut(fullOperations);
-            _refreshAllViewsAfterDataLoad();
-            console.log('✅ [Fase 2] Dashboard actualizado con historial completo');
-        } catch (e) {
-            console.warn('⚠️ [Fase 2] Error actualizando con historial completo:', e.message);
+        if (fullOperations.length > currentCount || currentCount === 0) {
+            console.log(`✅ [Fase 2] ${fullOperations.length} operaciones completas recibidas, actualizando...`);
+            try {
+                window.DB.operations = fullOperations;
+                await window.dexieDB.operations.clear();
+                await window.dexieDB.operations.bulkPut(fullOperations);
+                _refreshAllViewsAfterDataLoad();
+                _showDataLoadBanner('ok', `${fullOperations.length} operaciones cargadas correctamente.`);
+                console.log('✅ [Fase 2] Dashboard actualizado con historial completo');
+            } catch (e) {
+                console.warn('⚠️ [Fase 2] Error actualizando con historial completo:', e.message);
+            }
         }
     }).catch(e => {
         console.warn('⚠️ [Fase 2] Error cargando historial completo:', e.message);
+        _showDataLoadBanner('error', 'Error cargando operaciones. Recarga la página o contacta soporte.');
     });
 
     try {
@@ -41803,7 +41844,10 @@ async function _getAuthHeaders() {
 async function _loadOperationsViaAPI() {
     try {
         const headers = await _getAuthHeaders();
-        if (!headers) return [];
+        if (!headers) {
+            console.error('❌ [API operations] Sin token JWT');
+            return [];
+        }
         const res = await fetch('/api/operations?action=list&limit=2000', { headers });
         if (!res.ok) {
             console.error('❌ [API operations] HTTP', res.status);
@@ -41817,6 +41861,88 @@ async function _loadOperationsViaAPI() {
         console.error('❌ [API operations] Error:', e.message);
         return [];
     }
+}
+
+function _localOpToCloudRow(op) {
+    let imageDatasForSupabase = [];
+    if (op.imageDatas && Array.isArray(op.imageDatas)) {
+        imageDatasForSupabase = op.imageDatas.map(imgData =>
+            typeof imgData === 'object' ? JSON.stringify(imgData) : imgData
+        );
+    }
+    return {
+        id: op.id,
+        account_id: op.accountId,
+        date: op.date,
+        instrument: op.instrument,
+        type: op.type,
+        entry: parseFloat(op.entry) || 0,
+        exit: parseFloat(op.exit) || 0,
+        entry_time: op.entryTime || null,
+        exit_time: op.exitTime || null,
+        volume: parseFloat(op.volume) || 0,
+        result: op.result,
+        pl: parseFloat(op.pl) || 0,
+        currency: op.currency || 'USD',
+        notes: op.notes || '',
+        image_datas: imageDatasForSupabase,
+        commission: parseFloat(op.fees) || 0,
+        manual_pl: parseFloat(op.manualPL || op.pl) || 0,
+        session: op.session || 'No especificado',
+        setup_id: op.setupId || op.setupUsed || null,
+        mae: parseFloat(op.mae) || 0,
+        mfe: parseFloat(op.mfe) || 0
+    };
+}
+
+async function _bulkSyncDexieToCloud() {
+    try {
+        const headers = await _getAuthHeaders();
+        if (!headers || !window.dexieDB?.operations) return 0;
+        const localOps = await window.dexieDB.operations.toArray();
+        if (!localOps.length) return 0;
+        console.log(`☁️ [bulk-sync] Subiendo ${localOps.length} operaciones locales a la nube...`);
+        const rows = localOps.map(_localOpToCloudRow);
+        const res = await fetch('/api/operations?action=bulk-sync', {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ operations: rows })
+        });
+        if (!res.ok) {
+            console.error('❌ [bulk-sync] HTTP', res.status);
+            return 0;
+        }
+        const json = await res.json();
+        const synced = json.synced || rows.length;
+        console.log(`✅ [bulk-sync] ${synced} operaciones sincronizadas`);
+        return synced;
+    } catch (e) {
+        console.error('❌ [bulk-sync] Error:', e.message);
+        return 0;
+    }
+}
+
+function _showDataLoadBanner(type, message) {
+    const id = 'ts-data-load-banner';
+    let el = document.getElementById(id);
+    if (!el) {
+        el = document.createElement('div');
+        el.id = id;
+        el.style.cssText = 'position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:99999;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:500;max-width:90%;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.4);';
+        document.body.appendChild(el);
+    }
+    const colors = {
+        ok: { bg: 'rgba(57,255,20,0.15)', border: '#39FF14', color: '#39FF14' },
+        warn: { bg: 'rgba(255,193,7,0.15)', border: '#ffc107', color: '#ffc107' },
+        error: { bg: 'rgba(255,68,68,0.15)', border: '#ff4444', color: '#ff4444' }
+    };
+    const c = colors[type] || colors.warn;
+    el.style.background = c.bg;
+    el.style.border = `1px solid ${c.border}`;
+    el.style.color = c.color;
+    el.textContent = message;
+    el.style.display = 'block';
+    if (type === 'ok') setTimeout(() => { el.style.display = 'none'; }, 5000);
 }
 
 // Helper interno para mapear formato Supabase → formato local
@@ -41853,6 +41979,15 @@ async function loadOperationsFromSupabase() {
         console.warn('⚠️ [loadOperationsFromSupabase] No hay usuario autenticado');
         return [];
     }
+
+    console.log('🔍 [loadOperationsFromSupabase] user_id:', currentUser.id);
+
+    const apiOps = await _loadOperationsViaAPI();
+    if (apiOps.length > 0) {
+        console.log(`✅ [loadOperationsFromSupabase] ${apiOps.length} ops vía API`);
+        return apiOps;
+    }
+
     const client = getSupabaseClient();
     if (!client) {
         console.error('❌ [loadOperationsFromSupabase] Cliente Supabase no disponible');
@@ -41860,8 +41995,6 @@ async function loadOperationsFromSupabase() {
     }
 
     try {
-        console.log('🔍 [loadOperationsFromSupabase] Consultando operaciones para user_id:', currentUser.id);
-
         const { data: { session } } = await client.auth.getSession();
         if (!session) {
             console.error('❌ [loadOperationsFromSupabase] Sin sesión JWT activa');
@@ -41877,23 +42010,15 @@ async function loadOperationsFromSupabase() {
 
         if (error) {
             console.error('❌ [loadOperationsFromSupabase] Error directo:', error.message);
-            return await _loadOperationsViaAPI();
+            return [];
         }
 
-        console.log(`✅ [loadOperationsFromSupabase] Datos recibidos: ${data?.length || 0} operaciones`);
-
-        if (!data?.length) {
-            console.warn('⚠️ [loadOperationsFromSupabase] Vacío — intentando API...');
-            return await _loadOperationsViaAPI();
-        }
-
-        const mappedOperations = _mapOperations(data);
-        console.log(`✅ [loadOperationsFromSupabase] ${mappedOperations.length} operaciones mapeadas`);
-        return mappedOperations;
+        console.log(`✅ [loadOperationsFromSupabase] ${data?.length || 0} ops vía Supabase directo`);
+        return data?.length ? _mapOperations(data) : [];
 
     } catch (error) {
         console.error('❌ [loadOperationsFromSupabase] Error:', error.message);
-        return await _loadOperationsViaAPI();
+        return [];
     }
 }
 
@@ -42422,7 +42547,7 @@ function setupEventListeners() {
         logoutBtn.addEventListener('click', (e) => { e.preventDefault(); handleLogout(); });
     }
     const headerLogout = document.getElementById('header-logout-btn');
-    if (headerLogout && !headerLogout.dataset.logoutBound) {
+    if (headerLogout && headerLogout.tagName !== 'A' && !headerLogout.dataset.logoutBound) {
         headerLogout.dataset.logoutBound = '1';
         headerLogout.addEventListener('click', async (e) => {
             e.preventDefault();
@@ -42597,32 +42722,18 @@ async function checkAuth() {
             return;
         }
         
-        // Intentar obtener sesión
-        const { data: { session }, error } = await supabase.auth.getSession();
+        const session = await waitForAuthSession();
 
-        if (error) {
-            console.error('❌ Error al verificar sesión:', error);
-            if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-                window.location.replace('/login');
-                return;
-            }
-            hideAuth();
-            clearUserInfo();
-            onUserLogout();
-            return;
-        }
-
-        console.log('🔐 Sesión:', session ? 'Activa' : 'No activa');
+        console.log('🔐 Sesión:', session?.user ? 'Activa' : 'No activa');
 
         if (session?.user) {
             console.log('✅ Usuario logueado:', session.user.email);
-            console.log('👤 User ID:', session.user.id);
             updateUserInfo(session.user);
             hideAuth();
-
-            // ACTIVAR SINCRONIZACIÓN AUTOMÁTICA
-            await onUserLogin(session.user);
-
+            if (!_authSessionHandled) {
+                _authSessionHandled = true;
+                await onUserLogin(session.user);
+            }
         } else {
             console.log('⚠️ No hay sesión activa - redirigiendo a login');
             if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
@@ -42699,8 +42810,10 @@ async function handleLogin(e) {
             hideAuth();
             hideMessage();
 
-            // ACTIVAR SINCRONIZACIÓN AUTOMÁTICA AL HACER LOGIN
-            await onUserLogin(data.user);
+            if (!_authSessionHandled) {
+                _authSessionHandled = true;
+                await onUserLogin(data.user);
+            }
         }, 1000);
 
     } catch (error) {
@@ -42789,31 +42902,9 @@ async function handleRegister(e) {
 async function performFullLogout() {
     if (window._logoutInProgress) return;
     window._logoutInProgress = true;
-    console.log('🚪 Cerrando sesión...');
-
-    try {
-        if (typeof onUserLogout === 'function') onUserLogout();
-        if (typeof clearUserInfo === 'function') clearUserInfo();
-
-        const client = getSupabaseClient();
-        if (client?.auth) {
-            const { error } = await client.auth.signOut({ scope: 'global' });
-            if (error) console.warn('⚠️ signOut:', error.message);
-        }
-    } catch (err) {
-        console.warn('⚠️ Error cerrando sesión:', err);
-    }
-
-    try {
-        Object.keys(localStorage).forEach(key => {
-            if (key.startsWith('sb-') || key.includes('supabase') || key === '_dash_metrics_cache') {
-                localStorage.removeItem(key);
-            }
-        });
-        sessionStorage.clear();
-    } catch (_) {}
-
-    window.location.href = '/login?logout=1';
+    _authSessionHandled = false;
+    sessionStorage.setItem('ts_logged_out', String(Date.now()));
+    window.location.href = '/logout.html';
 }
 
 window.performFullLogout = performFullLogout;
@@ -42843,35 +42934,40 @@ function getErrorMessage(errorMsg) {
 initializeSupabase().then(() => {
     if (supabase && supabase.auth) {
         supabase.auth.onAuthStateChange(async (event, session) => {
+            if (window._logoutInProgress) return;
             console.log('🔄 Cambio de estado de autenticación:', event);
+
+            if (event === 'SIGNED_OUT') {
+                _authSessionHandled = false;
+                if (typeof onUserLogout === 'function') onUserLogout();
+                clearUserInfo();
+                if (!window._logoutInProgress && !location.pathname.includes('login')) {
+                    window.location.replace('/login');
+                }
+                return;
+            }
+
+            if (event === 'INITIAL_SESSION' && session?.user) {
+                updateUserInfo(session.user);
+                hideAuth();
+                if (!_authSessionHandled) {
+                    _authSessionHandled = true;
+                    await onUserLogin(session.user);
+                }
+                if (typeof processGroupInvitation === 'function') {
+                    await processGroupInvitation();
+                }
+                return;
+            }
 
             if (event === 'SIGNED_IN' && session?.user) {
                 updateUserInfo(session.user);
                 hideAuth();
-                
-                // CARGAR DATOS DEL USUARIO DESPUÉS DEL LOGIN
+                _authSessionHandled = false;
                 await onUserLogin(session.user);
-                
-                // Procesar invitación pendiente después del login
+                _authSessionHandled = true;
                 if (typeof processPendingInvitation === 'function') {
                     await processPendingInvitation();
-                }
-            } else if (event === 'SIGNED_OUT') {
-                if (typeof onUserLogout === 'function') onUserLogout();
-                clearUserInfo();
-                if (!window._logoutInProgress) {
-                    window.location.replace('/login?logout=1');
-                }
-            } else if (event === 'INITIAL_SESSION' && session?.user) {
-                // Sesión ya existe al recargar la página
-                console.log('🔄 Sesión existente detectada - Iniciando carga de datos...');
-                
-                // IMPORTANTE: Llamar a onUserLogin para establecer currentUser y cargar todos los datos
-                await onUserLogin(session.user);
-                
-                // Procesar invitación si hay token en URL (sesión ya existente)
-                if (typeof processGroupInvitation === 'function') {
-                    await processGroupInvitation();
                 }
             }
         });

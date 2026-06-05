@@ -1032,13 +1032,19 @@
         if (isLocalDev) return;
 
         const params = new URLSearchParams(window.location.search);
+
         if (params.get('logout') === '1') {
-            try {
-                await supabase.auth.signOut({ scope: 'global' });
-            } catch (e) { /* ignore */ }
+            try { await supabase.auth.signOut({ scope: 'global' }); } catch (e) { /* ignore */ }
+            sessionStorage.removeItem('ts_logged_out');
             window.history.replaceState({}, '', '/login');
             return;
         }
+
+        const loggedOutAt = parseInt(sessionStorage.getItem('ts_logged_out') || '0', 10);
+        if (loggedOutAt && Date.now() - loggedOutAt < 8000) {
+            return;
+        }
+        sessionStorage.removeItem('ts_logged_out');
 
         try {
             const { data: { session } } = await supabase.auth.getSession();
@@ -1080,7 +1086,7 @@
             const { data, error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                    redirectTo: window.location.origin + '/platform.html'
+                    redirectTo: window.location.origin + '/app'
                 }
             });
             if (error) throw error;
@@ -1104,8 +1110,9 @@
         try {
             const { data, error } = await supabase.auth.signInWithPassword({ email, password });
             if (error) throw error;
+            sessionStorage.removeItem('ts_logged_out');
             showMsg(msg, '¡Bienvenido de vuelta! Redirigiendo...', 'success');
-            setTimeout(() => window.location.replace('platform.html'), 900);
+            setTimeout(() => window.location.replace('/app'), 600);
         } catch (err) {
             showMsg(msg, getErrMsg(err.message));
             setLoading(btn, false, '<i class="fas fa-sign-in-alt"></i> Iniciar Sesión');
@@ -1145,8 +1152,9 @@
                     document.getElementById('loginEmail').value = email;
                 }, 2500);
             } else if (data.session) {
+                sessionStorage.removeItem('ts_logged_out');
                 showMsg(msg, '¡Cuenta creada! Entrando...', 'success');
-                setTimeout(() => window.location.replace('platform.html'), 900);
+                setTimeout(() => window.location.replace('/app'), 600);
             }
         } catch (err) {
             showMsg(msg, getErrMsg(err.message));
@@ -1167,7 +1175,7 @@
 
         try {
             const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: window.location.origin + '/platform.html'
+                redirectTo: window.location.origin + '/app'
             });
             if (error) throw error;
             showMsg(msg, '¡Enlace enviado! Revisa tu bandeja de entrada.', 'success');

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cerrando sesión — Trading Survivor</title>
+    <meta name="robots" content="noindex, nofollow">
+    <script type="importmap">{ "imports": { "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2" } }</script>
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+            color: #39ff14;
+            font-family: Inter, system-ui, sans-serif;
+        }
+        .box { text-align: center; padding: 2rem; }
+        .spin { display: inline-block; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <p><span class="spin">⏳</span> Cerrando sesión...</p>
+    </div>
+    <script type="module">
+        import { createClient } from '@supabase/supabase-js';
+
+        const SUPABASE_URL = 'https://gakiamardmlgftfrlxkm.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdha2lhbWFyZG1sZ2Z0ZnJseGttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwMjczMzUsImV4cCI6MjA2ODYwMzMzNX0.wR3c9DMtSXzoagFDJdrmYqnN6vjfQMn8ijtUdOSpmYM';
+
+        try {
+            const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+            await supabase.auth.signOut({ scope: 'global' });
+        } catch (_) {}
+
+        try {
+            Object.keys(localStorage).forEach(k => {
+                if (k.startsWith('sb-') || k.includes('supabase') || k === '_dash_metrics_cache') {
+                    localStorage.removeItem(k);
+                }
+            });
+        } catch (_) {}
+
+        try {
+            sessionStorage.setItem('ts_logged_out', String(Date.now()));
+        } catch (_) {}
+
+        window.location.replace('/login');
+    </script>
+</body>
+</html>
