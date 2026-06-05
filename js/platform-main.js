@@ -28,6 +28,17 @@ function shouldShowUpgradeModal() {
     return true;
 }
 
+/**
+ * Función de confirmación global compatible con el código existente
+ * Wrapper simple sobre confirm() nativo para compatibilidad
+ */
+async function showConfirm(message, options = {}) {
+    const title = options.title || 'Confirmar';
+    const confirmText = options.confirmText || 'Aceptar';
+    const fullMessage = title ? `${title}\n\n${message}` : message;
+    return confirm(fullMessage);
+}
+
 /* ═══════════════════════════════════════════════════════════════
    ⏳ SISTEMA DE LOADING & SKELETON LOADERS
    ═══════════════════════════════════════════════════════════════ */
@@ -33937,17 +33948,25 @@ if (typeof MutationObserver !== 'undefined') {
                     e.preventDefault();
                     e.stopPropagation();
                     
+                    console.log('🚪 Logout clicked');
+                    
                     const dropdown = document.getElementById('user-dropdown-menu');
                     if (dropdown) dropdown.style.display = 'none';
                     
-                    if (await showConfirm('¿Estás seguro de que deseas cerrar sesión?', { title: 'Cerrar sesión', confirmText: 'Cerrar sesión', danger: false })) {
+                    // Confirmación simple con confirm nativo
+                    if (confirm('¿Estás seguro de que deseas cerrar sesión?')) {
+                        console.log('✅ Confirmado - cerrando sesión...');
                         try {
                             await window.supabase.auth.signOut();
-                            window.location.href = '/';
+                            console.log('✅ Sesión cerrada - redirigiendo...');
+                            window.location.href = '/login.html';
                         } catch (error) {
                             console.error('❌ Error al cerrar sesión:', error);
-                            window.location.href = '/';
+                            alert('Error al cerrar sesión. Redirigiendo...');
+                            window.location.href = '/login.html';
                         }
+                    } else {
+                        console.log('❌ Logout cancelado');
                     }
                 });
                 
@@ -34166,14 +34185,20 @@ if (typeof MutationObserver !== 'undefined') {
                         dropdown.style.display = 'none';
                     }
                     
-                    if (await showConfirm('¿Estás seguro de que deseas cerrar sesión?', { title: 'Cerrar sesión', confirmText: 'Cerrar sesión', danger: false })) {
+                    // Confirmación simple con confirm nativo
+                    if (confirm('¿Estás seguro de que deseas cerrar sesión?')) {
+                        console.log('✅ Confirmado - cerrando sesión...');
                         try {
                             await window.supabase.auth.signOut();
-                            window.location.href = '/';
+                            console.log('✅ Sesión cerrada - redirigiendo...');
+                            window.location.href = '/login.html';
                         } catch (error) {
                             console.error('❌ Error al cerrar sesión:', error);
-                            window.location.href = '/';
+                            alert('Error al cerrar sesión. Redirigiendo...');
+                            window.location.href = '/login.html';
                         }
+                    } else {
+                        console.log('❌ Logout cancelado');
                     }
                 });
                 
