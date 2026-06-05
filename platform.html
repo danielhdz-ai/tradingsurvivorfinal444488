@@ -16802,8 +16802,9 @@ window.showConfirm = function(message, options = {}) {
     window.showSkeleton = function(containerId) {
         const container = document.getElementById(containerId);
         if (!container) return;
-        if (container.querySelector('.ts-skeleton-overlay')) return; // already shown
         const ref = container.closest('.metric-card') || container;
+        // Una sola capa skeleton por tarjeta (avg win/loss tiene 3 IDs en la misma card)
+        if (ref.querySelector('.ts-skeleton-overlay')) return;
         if (getComputedStyle(ref).position === 'static') ref.style.position = 'relative';
         const overlay = document.createElement('div');
         overlay.className = 'ts-skeleton-overlay';
@@ -16819,12 +16820,11 @@ window.showConfirm = function(message, options = {}) {
         const container = document.getElementById(containerId);
         if (!container) return;
         const ref = container.closest('.metric-card') || container;
-        const overlay = ref.querySelector('.ts-skeleton-overlay');
-        if (overlay) {
+        ref.querySelectorAll('.ts-skeleton-overlay').forEach(overlay => {
             overlay.style.opacity = '0';
             overlay.style.transition = 'opacity 0.2s ease';
             setTimeout(() => overlay.remove(), 200);
-        }
+        });
     };
 
     // Show skeletons on all dashboard metric cards while data loads

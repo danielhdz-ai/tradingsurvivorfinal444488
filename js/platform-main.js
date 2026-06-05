@@ -249,6 +249,7 @@ function hideMetricLoadingState() {
     METRIC_VALUE_IDS.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.remove('metric-value-loading');
+        if (typeof hideSkeleton === 'function') hideSkeleton(id);
     });
     document.querySelectorAll('#dashboard .metric-card').forEach(card => {
         card.classList.remove('metric-card-loading');
@@ -20246,6 +20247,11 @@ if (typeof MutationObserver !== 'undefined') {
             const lossBarEl = document.getElementById('new-dash-loss-bar');
             if (lossBarEl) lossBarEl.style.width = `${lossPercent}%`;
 
+            // Quitar skeleton de la tarjeta avg win/loss (3 IDs comparten la misma card)
+            ['new-dash-avg-ratio', 'new-dash-avg-win', 'new-dash-avg-loss'].forEach(id => {
+                if (typeof hideSkeleton === 'function') hideSkeleton(id);
+            });
+
             // ── Guardar métricas en caché de localStorage ──────────────────
             // Se usa para mostrar valores instantáneamente en la próxima carga.
             try {
@@ -20318,6 +20324,10 @@ if (typeof MutationObserver !== 'undefined') {
                 }
                 const colorEl = document.getElementById('new-dash-net-pl');
                 if (colorEl) colorEl.className = `text-xl font-bold hide-amount mb-1 ${c.netPL >= 0 ? 'text-green' : 'text-red'}`;
+
+                ['new-dash-avg-ratio', 'new-dash-avg-win', 'new-dash-avg-loss'].forEach(id => {
+                    if (typeof hideSkeleton === 'function') hideSkeleton(id);
+                });
 
                 console.log('⚡ [MetricsCache] Métricas mostradas desde caché al instante');
             } catch (_) { /* caché corrupta — ignorar */ }
