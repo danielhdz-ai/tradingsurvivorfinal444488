@@ -1008,13 +1008,13 @@ if (typeof MutationObserver !== 'undefined') {
             }
 
             if (configLogoutBtn) {
-                configLogoutBtn.addEventListener('click', () => {
-                    // LOGOUT INMEDIATO
+                configLogoutBtn.addEventListener('click', async () => {
+                    try {
+                        await window.supabase.auth.signOut({ scope: 'local' });
+                    } catch (e) {}
                     localStorage.clear();
                     sessionStorage.clear();
-                    if (window.supabase?.auth?.signOut) {
-                        window.supabase.auth.signOut().catch(() => {});
-                    }
+                    if (window.indexedDB) indexedDB.deleteDatabase('TradingSurvivorDB');
                     window.location.replace('/login.html');
                 });
             }
@@ -20223,13 +20223,22 @@ if (typeof MutationObserver !== 'undefined') {
             const ratio = avgLoss > 0 ? avgWin / avgLoss : 0;
             
             const avgRatioEl = document.getElementById('new-dash-avg-ratio');
-            if (avgRatioEl) avgRatioEl.textContent = ratio.toFixed(2);
+            if (avgRatioEl) {
+                avgRatioEl.textContent = ratio.toFixed(2);
+                console.log('✅ Avg Ratio actualizado:', ratio.toFixed(2));
+            }
             
             const avgWinEl = document.getElementById('new-dash-avg-win');
-            if (avgWinEl) avgWinEl.textContent = formatCurrency(avgWin, DB.settings.defaultCurrency, currency);
+            if (avgWinEl) {
+                avgWinEl.textContent = formatCurrency(avgWin, DB.settings.defaultCurrency, currency);
+                console.log('✅ Avg Win actualizado:', formatCurrency(avgWin, DB.settings.defaultCurrency, currency));
+            }
             
             const avgLossEl = document.getElementById('new-dash-avg-loss');
-            if (avgLossEl) avgLossEl.textContent = formatCurrency(-avgLoss, DB.settings.defaultCurrency, currency);
+            if (avgLossEl) {
+                avgLossEl.textContent = formatCurrency(-avgLoss, DB.settings.defaultCurrency, currency);
+                console.log('✅ Avg Loss actualizado:', formatCurrency(-avgLoss, DB.settings.defaultCurrency, currency));
+            }
             
             // Update progress bars
             const totalRange = avgWin + avgLoss;
@@ -32779,10 +32788,13 @@ if (typeof MutationObserver !== 'undefined') {
 
             const logoutBtnConfig = document.getElementById('logout-btn-config');
             if (logoutBtnConfig) {
-                logoutBtnConfig.addEventListener('click', () => {
+                logoutBtnConfig.addEventListener('click', async () => {
+                    try {
+                        await window.supabase.auth.signOut({ scope: 'local' });
+                    } catch (e) {}
                     localStorage.clear();
                     sessionStorage.clear();
-                    if (window.supabase?.auth?.signOut) window.supabase.auth.signOut().catch(() => {});
+                    if (window.indexedDB) indexedDB.deleteDatabase('TradingSurvivorDB');
                     window.location.replace('/login.html');
                 });
             }
@@ -33922,33 +33934,38 @@ if (typeof MutationObserver !== 'undefined') {
                 });
             }
 
-            // Botón de cerrar sesión en header - SIMPLIFICADO PARA SIEMPRE FUNCIONAR
+            // Botón de cerrar sesión en header - LOGOUT COMPLETO
             const headerLogoutBtn = document.getElementById('header-logout-btn');
             
             if (headerLogoutBtn) {
-                // Remover listeners previos
                 const newLogoutBtn = headerLogoutBtn.cloneNode(true);
                 headerLogoutBtn.parentNode.replaceChild(newLogoutBtn, headerLogoutBtn);
                 
-                newLogoutBtn.addEventListener('click', (e) => {
+                newLogoutBtn.addEventListener('click', async (e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     
-                    // Cerrar dropdown
                     const dropdown = document.getElementById('user-dropdown-menu');
                     if (dropdown) dropdown.style.display = 'none';
                     
-                    // LOGOUT INMEDIATO - sin esperar confirmación ni Supabase
-                    // Limpiar TODO
+                    // LOGOUT COMPLETO Y CORRECTO
+                    try {
+                        // 1. Cerrar sesión en Supabase PRIMERO
+                        await window.supabase.auth.signOut({ scope: 'local' });
+                    } catch (e) {
+                        console.warn('Error cerrando sesión Supabase:', e);
+                    }
+                    
+                    // 2. Limpiar TODO el storage
                     localStorage.clear();
                     sessionStorage.clear();
                     
-                    // Intentar cerrar sesión Supabase (no esperar si falla)
-                    if (window.supabase?.auth?.signOut) {
-                        window.supabase.auth.signOut().catch(() => {});
+                    // 3. Limpiar IndexedDB
+                    if (window.indexedDB) {
+                        indexedDB.deleteDatabase('TradingSurvivorDB');
                     }
                     
-                    // Redirigir INMEDIATAMENTE
+                    // 4. Redirigir
                     window.location.replace('/login.html');
                 });
             }
@@ -34140,28 +34157,28 @@ if (typeof MutationObserver !== 'undefined') {
                 });
             }
 
-            // Botón de cerrar sesión en header - SIMPLIFICADO
+            // Botón de cerrar sesión en header - LOGOUT COMPLETO
             const headerLogoutBtn = document.getElementById('header-logout-btn');
             
             if (headerLogoutBtn) {
-                // Remover listeners previos
                 const newLogoutBtn = headerLogoutBtn.cloneNode(true);
                 headerLogoutBtn.parentNode.replaceChild(newLogoutBtn, headerLogoutBtn);
                 
-                newLogoutBtn.addEventListener('click', (e) => {
+                newLogoutBtn.addEventListener('click', async (e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     
-                    // Cerrar dropdown
                     const dropdown = document.getElementById('user-dropdown-menu');
                     if (dropdown) dropdown.style.display = 'none';
                     
-                    // LOGOUT INMEDIATO
+                    try {
+                        await window.supabase.auth.signOut({ scope: 'local' });
+                    } catch (e) {}
+                    
                     localStorage.clear();
                     sessionStorage.clear();
-                    if (window.supabase?.auth?.signOut) {
-                        window.supabase.auth.signOut().catch(() => {});
-                    }
+                    if (window.indexedDB) indexedDB.deleteDatabase('TradingSurvivorDB');
+                    
                     window.location.replace('/login.html');
                 });
             }
@@ -41695,16 +41712,16 @@ async function saveOperationToSupabase(operationData) {
 async function loadRecentOperationsQuick() {
     if (!currentUser) return [];
     try {
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        console.log('⚡ [loadRecentOperationsQuick] Cargando últimos 30 días...');
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        console.log('⚡ [loadRecentOperationsQuick] Cargando últimos 7 días...');
         const { data, error } = await supabase
             .from('operations')
             .select('id, account_id, date, instrument, type, entry, exit, entry_time, exit_time, volume, result, pl, currency, notes, fees, commission, manual_pl, session, setup_id, mae, mfe')
             .eq('user_id', currentUser.id)
-            .gte('date', thirtyDaysAgo.toISOString())
+            .gte('date', sevenDaysAgo.toISOString())
             .order('date', { ascending: false })
-            .limit(200);
+            .limit(100);
         if (error) throw error;
         console.log(`⚡ [loadRecentOperationsQuick] ${data?.length || 0} operaciones recientes recibidas`);
         return _mapOperations(data || []);
