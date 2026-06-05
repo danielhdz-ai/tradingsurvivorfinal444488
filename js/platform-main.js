@@ -40370,7 +40370,8 @@ async function checkUserSubscription(userId) {
     try {
         // El administrador siempre tiene plan PRO sin necesidad de suscripción
         const { data: { user: currentAuthUser } } = await supabase.auth.getUser();
-        if (currentAuthUser && currentAuthUser.email === 'daniel.hdz.trader@gmail.com') {
+        const adminEmails = ['daniel.hdz.trader@gmail.com', 'danielhernandezhv3@gmail.com'];
+        if (currentAuthUser && adminEmails.includes(currentAuthUser.email)) {
             window.userPlan = 'pro';
             window.userSubscriptionStatus = 'active';
             console.log('👑 Plan del usuario: PRO (administrador)');
