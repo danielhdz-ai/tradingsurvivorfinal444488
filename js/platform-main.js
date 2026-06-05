@@ -42664,6 +42664,9 @@ initializeSupabase().then(() => {
                 updateUserInfo(session.user);
                 hideAuth();
                 
+                // CARGAR DATOS DEL USUARIO DESPUÉS DEL LOGIN
+                await onUserLogin(session.user);
+                
                 // Procesar invitación pendiente después del login
                 if (typeof processPendingInvitation === 'function') {
                     await processPendingInvitation();
@@ -42672,25 +42675,11 @@ initializeSupabase().then(() => {
                 clearUserInfo();
                 showAuth();
             } else if (event === 'INITIAL_SESSION' && session?.user) {
-                // Cargar finanzas cuando la sesión ya existe al recargar
-                console.log('🔄 Sesión existente detectada - Cargando finanzas...');
-                try {
-                    // Verificar que DB esté disponible
-                    if (typeof DB === 'undefined' || typeof window.DB === 'undefined') {
-                        console.error('❌ DB no está disponible aún');
-                        return;
-                    }
-                    
-                    const finances = await loadFinancesFromSupabase();
-                    if (finances.length > 0) {
-                        DB.finances = finances;
-                        await dexieDB.finances.clear();
-                        await dexieDB.finances.bulkPut(finances);
-                        console.log('✅ Finanzas cargadas en INITIAL_SESSION:', DB.finances.length);
-                    }
-                } catch (error) {
-                    console.error('❌ Error cargando finanzas en INITIAL_SESSION:', error);
-                }
+                // Sesión ya existe al recargar la página
+                console.log('🔄 Sesión existente detectada - Iniciando carga de datos...');
+                
+                // IMPORTANTE: Llamar a onUserLogin para establecer currentUser y cargar todos los datos
+                await onUserLogin(session.user);
                 
                 // Procesar invitación si hay token en URL (sesión ya existente)
                 if (typeof processGroupInvitation === 'function') {
