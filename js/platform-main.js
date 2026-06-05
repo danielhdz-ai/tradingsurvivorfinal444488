@@ -41775,16 +41775,46 @@ async function loadRecentOperationsQuick() {
         console.log('⚡ [loadRecentOperationsQuick] Cargando últimos 7 días...');
         const { data, error } = await client
             .from('operations')
-            .select('id, account_id, date, instrument, type, entry, exit, entry_time, exit_time, volume, result, pl, currency, notes, fees, commission, manual_pl, session, setup_id, mae, mfe')
+            .select('*')
             .eq('user_id', currentUser.id)
-            .gte('date', sevenDaysAgo.toISOString())
             .order('date', { ascending: false })
             .limit(100);
-        if (error) throw error;
+        if (error) {
+            console.warn('⚠️ [loadRecentOperationsQuick] Error directo:', error.message);
+            return await _loadOperationsViaAPI();
+        }
         console.log(`⚡ [loadRecentOperationsQuick] ${data?.length || 0} operaciones recientes recibidas`);
+        if (!data?.length) return await _loadOperationsViaAPI();
         return _mapOperations(data || []);
     } catch (error) {
         console.warn('⚠️ [loadRecentOperationsQuick] Error:', error.message);
+        return await _loadOperationsViaAPI();
+    }
+}
+
+async function _getAuthHeaders() {
+    const client = getSupabaseClient();
+    if (!client) return null;
+    const { data: { session } } = await client.auth.getSession();
+    if (!session?.access_token) return null;
+    return { Authorization: `Bearer ${session.access_token}` };
+}
+
+async function _loadOperationsViaAPI() {
+    try {
+        const headers = await _getAuthHeaders();
+        if (!headers) return [];
+        const res = await fetch('/api/operations?action=list&limit=2000', { headers });
+        if (!res.ok) {
+            console.error('❌ [API operations] HTTP', res.status);
+            return [];
+        }
+        const json = await res.json();
+        const ops = json.operations || [];
+        console.log(`✅ [API operations] ${ops.length} operaciones recibidas`);
+        return _mapOperations(ops);
+    } catch (e) {
+        console.error('❌ [API operations] Error:', e.message);
         return [];
     }
 }
@@ -41840,31 +41870,30 @@ async function loadOperationsFromSupabase() {
 
         const { data, error } = await client
             .from('operations')
-            .select('id, account_id, date, instrument, type, entry, exit, entry_time, exit_time, volume, result, pl, currency, notes, fees, commission, manual_pl, session, setup_id, mae, mfe')
+            .select('*')
             .eq('user_id', currentUser.id)
             .order('date', { ascending: false })
             .limit(2000);
 
         if (error) {
-            console.error('❌ [loadOperationsFromSupabase] Error en consulta Supabase:', error);
-            throw error;
+            console.error('❌ [loadOperationsFromSupabase] Error directo:', error.message);
+            return await _loadOperationsViaAPI();
         }
 
-        console.log(`✅ [loadOperationsFromSupabase] Datos recibidos de Supabase: ${data?.length || 0} operaciones`);
-        
-        if (data && data.length > 0) {
-            console.log('📋 [loadOperationsFromSupabase] Primera operación:', data[0]);
+        console.log(`✅ [loadOperationsFromSupabase] Datos recibidos: ${data?.length || 0} operaciones`);
+
+        if (!data?.length) {
+            console.warn('⚠️ [loadOperationsFromSupabase] Vacío — intentando API...');
+            return await _loadOperationsViaAPI();
         }
 
-        // Convertir de formato Supabase a formato local (reutiliza _mapOperations)
-        const mappedOperations = _mapOperations(data || []);
-        console.log(`✅ [loadOperationsFromSupabase] ${mappedOperations.length} operaciones mapeadas correctamente`);
+        const mappedOperations = _mapOperations(data);
+        console.log(`✅ [loadOperationsFromSupabase] ${mappedOperations.length} operaciones mapeadas`);
         return mappedOperations;
-        
+
     } catch (error) {
-        console.error('❌ [loadOperationsFromSupabase] Error cargando operaciones:', error);
-        console.error('❌ [loadOperationsFromSupabase] Error details:', error.message);
-        return [];
+        console.error('❌ [loadOperationsFromSupabase] Error:', error.message);
+        return await _loadOperationsViaAPI();
     }
 }
 
