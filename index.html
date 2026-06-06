@@ -2064,6 +2064,17 @@
     </footer>
 
     <script>
+        // ─── OAuth callback detector ──────────────────────────────
+        // Supabase redirige aquí si /app no está en la lista permitida del dashboard.
+        // Detectamos el code/token y reenviamos a /app para que platform.html lo procese.
+        (function() {
+            var search = window.location.search;
+            var hash   = window.location.hash;
+            if (search.includes('code=') || hash.includes('access_token=') || hash.includes('type=recovery')) {
+                window.location.replace('/app' + search + hash);
+            }
+        })();
+
         // ─── NAV SCROLL ───────────────────────────────────────────
         const navbar = document.getElementById('navbar');
         window.addEventListener('scroll', () => {

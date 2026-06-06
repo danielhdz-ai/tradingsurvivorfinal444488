@@ -42932,16 +42932,18 @@ initializeSupabase().then(() => {
                 if (session?.user) {
                     updateUserInfo(session.user);
                     hideAuth();
-                    // _userLoginPromise actúa de mutex si ya hay una carga en curso
                     if (!_userLoginPromise) await onUserLogin(session.user);
                     if (typeof processGroupInvitation === 'function') {
                         await processGroupInvitation().catch(() => {});
                     }
                 } else {
-                    // No hay sesión al cargar la plataforma → enviar a login
-                    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                    // Si hay un ?code= en la URL es un callback OAuth — esperar a SIGNED_IN
+                    const hasOAuthCode = new URLSearchParams(window.location.search).has('code')
+                                      || window.location.hash.includes('access_token');
+                    if (!hasOAuthCode && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
                         window.location.replace('/login');
                     }
+                    // Si hasOAuthCode → Supabase está procesando el token; SIGNED_IN llegará solo
                 }
                 return;
             }
