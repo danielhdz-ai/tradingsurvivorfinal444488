@@ -40078,7 +40078,8 @@ if (typeof MutationObserver !== 'undefined') {
 // ===== SUPABASE AUTHENTICATION SYSTEM =====
 
 // Variable global para el cliente Supabase
-var supabase = null;
+// IMPORTANTE: no asignar null si window.supabase ya tiene el cliente cargado
+var supabase = (typeof window !== 'undefined' && window.supabase?.auth) ? window.supabase : null;
 
 /** Cliente Supabase unificado — nunca devuelve null si window.supabase está listo */
 function getSupabaseClient() {
@@ -40093,9 +40094,8 @@ window.getSupabaseClient = getSupabaseClient;
 
 // Función para inicializar Supabase esperando al evento si es necesario
 async function initializeSupabase() {
-    // Si ya está disponible, usarlo inmediatamente
-    if (window.supabase && window.supabase.auth) {
-        console.log('✅ Supabase ya disponible inmediatamente');
+    // Si ya está listo (supabaseReady=true) y el cliente tiene auth, usar inmediatamente
+    if (window.supabaseReady && window.supabase?.auth) {
         supabase = window.supabase;
         return true;
     }

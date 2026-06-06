@@ -16419,8 +16419,12 @@
         window.supabase = client;
 
         function fireReady() {
+            // Re-asignar siempre: platform-main.js tiene 'var supabase = null'
+            // que al ser var global sobreescribe window.supabase con null
+            window.supabaseClient = client;
+            window.supabase = client;
             window.supabaseReady = true;
-            console.log('✅ Supabase listo');
+            console.log('✅ Supabase listo, sesión:', client.auth ? 'auth OK' : 'SIN auth');
             window.dispatchEvent(new Event('supabase-ready'));
         }
 
