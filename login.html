@@ -836,7 +836,7 @@
                         <span>o continúa con</span>
                     </div>
 
-                    <button type="button" class="btn-oauth" onclick="handleGoogleLogin()">
+                    <button type="button" class="btn-oauth" id="googleBtnLogin" onclick="this.disabled=true;this.innerHTML='<i class=\'fas fa-spinner fa-spin\'></i> Conectando...';handleGoogleLogin().finally(()=>{this.disabled=false;this.innerHTML='<i class=\'fab fa-google\'></i> Continuar con Google';})">
                         <i class="fab fa-google"></i> Continuar con Google
                     </button>
                 </form>
@@ -879,7 +879,7 @@
                         <span>o regístrate con</span>
                     </div>
 
-                    <button type="button" class="btn-oauth" onclick="handleGoogleLogin()">
+                    <button type="button" class="btn-oauth" id="googleBtnRegister" onclick="this.disabled=true;this.innerHTML='<i class=\'fas fa-spinner fa-spin\'></i> Conectando...';handleGoogleLogin().finally(()=>{this.disabled=false;this.innerHTML='<i class=\'fab fa-google\'></i> Continuar con Google';})">
                         <i class="fab fa-google"></i> Continuar con Google
                     </button>
                 </form>
@@ -1082,17 +1082,20 @@
 
     // ─── GOOGLE OAUTH ─────────────────────────────────────────
     window.handleGoogleLogin = async function() {
+        const msg = document.getElementById('authMsg');
         try {
+            // redirectTo = raíz del sitio (siempre en la allowlist de Supabase como Site URL).
+            // El interceptor en index.html detecta ?code= y reenvía a /app automáticamente.
             const { data, error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                    redirectTo: window.location.origin + '/app'
+                    redirectTo: window.location.origin + '/'
                 }
             });
             if (error) throw error;
         } catch (err) {
-            const msg = document.getElementById('authMsg');
-            showMsg(msg, 'Error al conectar con Google. Intenta de nuevo.');
+            console.error('Google OAuth error:', err);
+            showMsg(msg, 'Error al conectar con Google: ' + (err.message || 'inténtalo de nuevo'));
         }
     };
 
