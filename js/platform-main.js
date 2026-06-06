@@ -40092,57 +40092,49 @@ function getSupabaseClient() {
 }
 window.getSupabaseClient = getSupabaseClient;
 
-// Función para inicializar Supabase esperando al evento si es necesario
+// Función para inicializar Supabase — SIEMPRE espera a supabaseReady
 async function initializeSupabase() {
-    // Si ya está listo (supabaseReady=true) y el cliente tiene auth, usar inmediatamente
+    // Atajo: ya listo (supabaseReady garantiza que setSession completó)
     if (window.supabaseReady && window.supabase?.auth) {
         supabase = window.supabase;
         return true;
     }
-    
-    // Esperar al evento 'supabase-ready' con timeout más largo
-    console.log('⏳ Esperando inicialización de Supabase...');
+
+    // Esperar el evento 'supabase-ready' (disparado por platform.html DESPUÉS de setSession)
     return new Promise((resolve) => {
         let resolved = false;
-        
-        const checkSupabase = () => {
+
+        const onReady = () => {
             if (resolved) return;
-            
-            if (window.supabase && window.supabase.auth) {
-                resolved = true;
-                console.log('✅ Supabase inicializado correctamente');
-                console.log('✅ Supabase.auth disponible:', typeof window.supabase.auth);
+            resolved = true;
+            if (window.supabase?.auth) {
                 supabase = window.supabase;
+                console.log('✅ Supabase listo:', supabase.auth ? 'auth OK' : 'SIN auth');
                 resolve(true);
             } else {
-                console.warn('⚠️ Supabase cargado pero auth no disponible');
-                resolved = true;
+                console.error('❌ supabase-ready pero sin auth');
                 resolve(false);
             }
         };
-        
-        // Intentar primero de forma síncrona
-        if (window.supabaseReady || (window.supabase && window.supabase.auth)) {
-            checkSupabase();
+
+        // Solo usar el atajo síncrono si supabaseReady ya fue marcado
+        if (window.supabaseReady) {
+            onReady();
         } else {
-            // Si no está listo, esperar al evento con timeout de 10 segundos
-            window.addEventListener('supabase-ready', checkSupabase, { once: true });
-            
-            // Timeout de 10 segundos
+            window.addEventListener('supabase-ready', onReady, { once: true });
+            // Timeout de seguridad: 15 segundos
             setTimeout(() => {
                 if (!resolved) {
                     resolved = true;
-                    console.error('⏰ Timeout esperando Supabase (10s)');
-                    // Intentar una vez más antes de fallar
-                    if (window.supabase && window.supabase.auth) {
-                        console.log('✅ Supabase disponible en timeout');
+                    console.error('⏰ Timeout 15s esperando supabase-ready');
+                    if (window.supabase?.auth) {
                         supabase = window.supabase;
                         resolve(true);
                     } else {
                         resolve(false);
                     }
                 }
-            }, 10000);
+            }, 15000);
         }
     });
 }

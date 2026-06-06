@@ -16415,16 +16415,16 @@
         var client = supabase.createClient(supabaseUrl, supabaseKey, {
             auth: { detectSessionInUrl: false }  // lo manejamos manualmente
         });
-        window.supabaseClient = client;
-        window.supabase = client;
+        // NO asignamos window.supabase aquí todavía.
+        // platform-main.js tiene 'var supabase = null' que es window.supabase = null.
+        // Solo asignamos en fireReady(), DESPUÉS de setSession, para que
+        // initializeSupabase() no resuelva antes de que la sesión esté lista.
 
         function fireReady() {
-            // Re-asignar siempre: platform-main.js tiene 'var supabase = null'
-            // que al ser var global sobreescribe window.supabase con null
             window.supabaseClient = client;
-            window.supabase = client;
+            window.supabase = client;      // asignar justo antes del evento
             window.supabaseReady = true;
-            console.log('✅ Supabase listo, sesión:', client.auth ? 'auth OK' : 'SIN auth');
+            console.log('✅ Supabase listo');
             window.dispatchEvent(new Event('supabase-ready'));
         }
 
