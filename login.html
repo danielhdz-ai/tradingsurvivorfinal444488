@@ -15,7 +15,8 @@
     <link rel="icon" href="logos/trader-survivor-logo.svg" type="image/svg+xml">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-    <script type="importmap">{ "imports": { "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2" } }</script>
+    <!-- Supabase UMD desde CDN — sin módulos ES para máxima compatibilidad -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
     <style>
         :root {
@@ -1017,12 +1018,11 @@
     </div>
 </div>
 
-<script type="module">
-    import { createClient } from '@supabase/supabase-js';
-
+<script>
+    // Supabase ya disponible como global window.supabase via UMD
     const SUPABASE_URL = 'https://gakiamardmlgftfrlxkm.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdha2lhbWFyZG1sZ2Z0ZnJseGttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwMjczMzUsImV4cCI6MjA2ODYwMzMzNX0.wR3c9DMtSXzoagFDJdrmYqnN6vjfQMn8ijtUdOSpmYM';
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     // ─── Check if already logged in ─────────────────────────
     // En localhost/Live Server no redirigir automáticamente (facilita el diseño)
@@ -1277,19 +1277,7 @@
     });
 </script>
 
-<!--Start of Tawk.to Script-->
-<script type="text/javascript">
-var Tawk_API=Tawk_API||{}, Tawk_LoadStart=new Date();
-(function(){
-    var s1=document.createElement("script"),s0=document.getElementsByTagName("script")[0];
-    s1.async=true;
-    s1.src='https://embed.tawk.to/69b5b66603f68d1c33d1cde6/1jjmt1009';
-    s1.charset='UTF-8';
-    s1.setAttribute('crossorigin','*');
-    s0.parentNode.insertBefore(s1,s0);
-})();
-</script>
-<!--End of Tawk.to Script-->
+<!-- Tawk.to no incluido en login para evitar errores de CSP en esta página -->
 
 </body>
 </html>
