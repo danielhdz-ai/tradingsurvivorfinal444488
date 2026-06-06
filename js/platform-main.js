@@ -42483,9 +42483,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initializeSupabase();
     setupEventListeners();
     // La sesión se gestiona exclusivamente en onAuthStateChange (INITIAL_SESSION).
-    // Fallback por si el evento tarda > 4 segundos (conexión lenta o bloqueado por ad-blocker).
+    // Fallback por si el evento tarda > 8 segundos (conexión lenta o bloqueado por ad-blocker).
     setTimeout(async () => {
         if (currentUser || window._logoutInProgress) return;
+        // Si hay un ?code= en la URL es un callback OAuth en proceso — no interrumpir
+        const hasOAuthCode = new URLSearchParams(window.location.search).has('code')
+                          || window.location.hash.includes('access_token');
+        if (hasOAuthCode) return;
         const client = getSupabaseClient();
         if (!client?.auth) {
             if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
@@ -42509,7 +42513,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 window.location.replace('/login');
             }
         }
-    }, 4000);
+    }, 8000);
 });
 
 // ===== EVENT LISTENERS =====
