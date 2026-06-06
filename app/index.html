@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Trading Survivor</title>
+<script>
+// Este archivo existe para que Vercel sirva correctamente /app.
+// Redirige a /platform preservando hash (#access_token=) y query (?code=).
+(function() {
+    var dest = '/platform' + window.location.search + window.location.hash;
+    window.location.replace(dest);
+})();
+</script>
+</head>
+<body></body>
+</html>
