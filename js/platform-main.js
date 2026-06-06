@@ -42962,20 +42962,10 @@ initializeSupabase().then(() => {
         }
 
         if (event === 'INITIAL_SESSION' && !session?.user) {
-            if (_hasOAuth) {
-                // El SDK procesa #access_token de forma asíncrona.
-                // SIGNED_IN llegará en breve — no redirigir todavía.
-                console.log('⏳ OAuth detectado en URL, esperando SIGNED_IN...');
-                setTimeout(() => {
-                    if (!currentUser && _isProd) {
-                        console.warn('⏰ Timeout 10s sin SIGNED_IN → /login');
-                        window.location.replace('/login');
-                    }
-                }, 10000);
-            } else {
-                console.warn('⚠️ Sin sesión → /login');
-                if (_isProd) window.location.replace('/login');
-            }
+            // El token ya fue procesado por setSession() en platform.html.
+            // Si INITIAL_SESSION no tiene sesión, el usuario no está autenticado.
+            console.warn('⚠️ Sin sesión en INITIAL_SESSION → /login');
+            if (_isProd) window.location.replace('/login');
         }
     });
 });

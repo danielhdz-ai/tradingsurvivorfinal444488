@@ -16390,18 +16390,57 @@
         </div>
     </div>
 
-    <!-- Inicializar Supabase con UMD (sincrono, sin ES modules) -->
+    <!-- Inicializar Supabase con UMD + manejar implicit flow ANTES de crear cliente -->
     <script>
-        (function() {
-            var supabaseUrl = 'https://gakiamardmlgftfrlxkm.supabase.co';
-            var supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdha2lhbWFyZG1sZ2Z0ZnJseGttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwMjczMzUsImV4cCI6MjA2ODYwMzMzNX0.wR3c9DMtSXzoagFDJdrmYqnN6vjfQMn8ijtUdOSpmYM';
-            var client = supabase.createClient(supabaseUrl, supabaseKey);
-            window.supabaseClient = client;
-            window.supabase = client;
+    (function() {
+        var supabaseUrl = 'https://gakiamardmlgftfrlxkm.supabase.co';
+        var supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdha2lhbWFyZG1sZ2Z0ZnJseGttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwMjczMzUsImV4cCI6MjA2ODYwMzMzNX0.wR3c9DMtSXzoagFDJdrmYqnN6vjfQMn8ijtUdOSpmYM';
+
+        // Extraer token del hash ANTES de crear el cliente para evitar doble-procesado
+        var oauthTokens = null;
+        if (location.hash.includes('access_token=')) {
+            try {
+                var hp = new URLSearchParams(location.hash.substring(1));
+                var at = hp.get('access_token');
+                var rt = hp.get('refresh_token') || '';
+                if (at) {
+                    oauthTokens = { access_token: at, refresh_token: rt };
+                    // Limpiar hash para que el SDK NO lo procese de nuevo
+                    history.replaceState(null, '', location.pathname + location.search);
+                    console.log('🔑 Implicit flow token extraido, hash limpiado');
+                }
+            } catch(e) { console.error('Error extrayendo token:', e); }
+        }
+
+        var client = supabase.createClient(supabaseUrl, supabaseKey, {
+            auth: { detectSessionInUrl: false }  // lo manejamos manualmente
+        });
+        window.supabaseClient = client;
+        window.supabase = client;
+
+        function fireReady() {
             window.supabaseReady = true;
-            console.log('✅ Supabase UMD inicializado:', client.auth ? 'auth OK' : 'SIN auth');
+            console.log('✅ Supabase listo');
             window.dispatchEvent(new Event('supabase-ready'));
-        })();
+        }
+
+        if (oauthTokens) {
+            // Llamar setSession y esperar resultado antes de disparar supabase-ready
+            client.auth.setSession(oauthTokens).then(function(res) {
+                if (res.error) {
+                    console.error('❌ setSession error:', res.error.message);
+                } else {
+                    console.log('✅ Sesión OAuth establecida:', res.data.session ? res.data.session.user.email : 'sin sesión');
+                }
+                fireReady();
+            }).catch(function(e) {
+                console.error('❌ setSession exception:', e);
+                fireReady();
+            });
+        } else {
+            fireReady();
+        }
+    })();
     </script>
 
     <!-- JavaScript Principal -->
