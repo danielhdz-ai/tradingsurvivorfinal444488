@@ -42481,30 +42481,54 @@ const logoutBtn = document.getElementById('logoutBtn');
 // ===== INICIALIZACIÓN =====
 document.addEventListener('DOMContentLoaded', async () => {
     const isProd = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-    const hasOAuthCode = new URLSearchParams(window.location.search).has('code')
-                      || window.location.hash.includes('access_token');
 
-    // 1. Inicializar Supabase (espera a que el módulo dispare supabase-ready)
+    // 1. Inicializar Supabase
     await initializeSupabase();
     setupEventListeners();
 
-    // 2. Si hay ?code= es un callback OAuth — dejar que onAuthStateChange lo procese
-    if (hasOAuthCode) {
-        console.log('🔑 OAuth callback detectado — esperando SIGNED_IN...');
-        // Si en 15s no hay sesión, algo falló
-        setTimeout(() => {
-            if (!currentUser && isProd) window.location.replace('/login');
-        }, 15000);
+    const client = getSupabaseClient();
+    if (!client?.auth) {
+        if (isProd) window.location.replace('/login');
         return;
     }
 
-    // 3. Verificar sesión DIRECTAMENTE (no esperar a onAuthStateChange)
-    try {
-        const client = getSupabaseClient();
-        if (!client?.auth) {
-            if (isProd) window.location.replace('/login');
-            return;
+    // 2. Implicit flow: #access_token= en el hash → extraer y establecer sesión manualmente
+    if (window.location.hash.includes('access_token=')) {
+        console.log('🔑 Implicit flow detectado — procesando access_token del hash...');
+        try {
+            const hashParams = new URLSearchParams(window.location.hash.substring(1));
+            const accessToken  = hashParams.get('access_token');
+            const refreshToken = hashParams.get('refresh_token') || '';
+            if (accessToken) {
+                const { data, error } = await client.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+                console.log('🔐 setSession:', data?.session?.user?.email || 'sin sesión', error || '');
+                if (data?.session?.user) {
+                    // Limpiar el hash de la URL (no exponer el token en la barra)
+                    window.history.replaceState(null, '', window.location.pathname);
+                    updateUserInfo(data.session.user);
+                    hideAuth();
+                    if (!_userLoginPromise) await onUserLogin(data.session.user);
+                    return;
+                }
+            }
+        } catch (e) {
+            console.error('❌ Error procesando implicit flow:', e);
         }
+        if (isProd) window.location.replace('/login');
+        return;
+    }
+
+    // 3. PKCE flow: ?code= en la URL → Supabase SDK lo procesa automáticamente; esperar SIGNED_IN
+    if (new URLSearchParams(window.location.search).has('code')) {
+        console.log('🔑 PKCE flow detectado — esperando SIGNED_IN de Supabase...');
+        setTimeout(() => {
+            if (!currentUser && isProd) window.location.replace('/login');
+        }, 12000);
+        return;
+    }
+
+    // 4. Sesión existente (email login u OAuth previo) → getSession directo
+    try {
         const { data: { session }, error } = await client.auth.getSession();
         console.log('🔐 getSession():', session?.user?.email || 'sin sesión', error || '');
         if (session?.user) {
