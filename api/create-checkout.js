@@ -55,13 +55,15 @@ export default async function handler(req, res) {
         const stripe = new Stripe(secretKey, { apiVersion: '2024-06-20' });
 
         // Crear PaymentIntent por $129 USD
+        // Usamos payment_method_types: ['card'] para evitar métodos con redirección
+        // que son incompatibles con confirmCardPayment sin return_url
         const paymentIntent = await stripe.paymentIntents.create({
-            amount: 12900,           // en centavos → $129.00
+            amount: 12900,
             currency: 'usd',
-            automatic_payment_methods: { enabled: true },
+            payment_method_types: ['card'],
             receipt_email: email,
             metadata: {
-                supabase_user_id: user.id,   // [H-1] siempre del JWT, nunca del body
+                supabase_user_id: user.id,
                 product: 'Trading Survivor Annual',
                 plan: 'annual_129'
             },

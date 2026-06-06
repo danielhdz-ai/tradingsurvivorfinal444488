@@ -1,0 +1,2331 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestor de Clientes y Propiedades - INMOBASE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f8f9fa; /* Default dark mode will override */
+    transition: background-color 0.3s, color 0.3s;
+}
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* --- BASE STYLES ( overridden by .dark or specific light mode) --- */
+.btn-primary { background-color: #1a56db; color: white; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer; font-weight: 500; transition: background-color 0.2s; }
+.btn-primary:hover { background-color: #1e429f; }
+.btn-secondary { background-color: #4b5563; color: white; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer; font-weight: 500; transition: background-color 0.2s; }
+.btn-secondary:hover { background-color: #374151; }
+
+input[type="text"], input[type="number"], input[type="email"], input[type="tel"], input[type="url"], select, textarea {
+    border: 1px solid #d1d5db; border-radius: 0.375rem; padding: 0.625rem 0.75rem; width: 100%;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: #2563eb; /* blue-500 */
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4);
+}
+.form-group { margin-bottom: 1.25rem; }
+.form-label { display: block; margin-bottom: 0.375rem; font-weight: 500; font-size: 0.875rem; }
+
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th, .data-table td { border: 1px solid #e5e7eb; padding: 0.75rem; text-align: left; vertical-align: middle; }
+.data-table th { background-color: #f3f4f6; font-weight: 600; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;}
+
+.modal { display: none; position: fixed; z-index: 50; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); }
+.modal-content { background-color: #fff; margin: 5% auto; padding: 1.75rem; border-radius: 0.5rem; width: 90%; max-width: 700px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); position: relative; max-height: 90vh; overflow-y: auto; }
+.close-modal-btn { color: #aaa; float: right; font-size: 32px; font-weight: bold; cursor: pointer; line-height: 1; }
+.close-modal-btn:hover { color: #000; }
+
+/* --- DARK MODE --- */
+.dark { background-color: #111827; color: #d1d5db; } /* Tailwind gray-900, gray-300 */
+    .dark .bg-white { background-color: #1f2937 !important; } /* gray-800 for cards */
+    .dark .header-title { color: #f9fafb !important; } 
+    .dark .header-subtitle { color: #9ca3af !important; } /* gray-400 */
+    .dark .text-gray-700, .dark .text-gray-500, .dark .text-sm, .dark .text-gray-600 { color: #d1d5db !important; }
+    .dark .form-control, .dark input, .dark select, .dark textarea { background-color: #374151; color: #f3f4f6; border-color: #4b5563; } /* gray-700, gray-200, gray-600 */
+    .dark input::placeholder, .dark textarea::placeholder { color: #9ca3af; }
+    .dark .btn-primary { background-color: #3b82f6; } /* blue-500 */
+    .dark .btn-primary:hover { background-color: #2563eb; } /* blue-600 */
+    .dark .btn-secondary { background-color: #4b5563; } /* gray-600 */
+    .dark .btn-secondary:hover { background-color: #374151; } /* gray-700 */
+    .dark .border-gray-200 { border-color: #374151 !important; } /* gray-700 */
+    .dark .bg-gray-50 { background-color: #374151 !important; } /* gray-700 for light sections in dark mode */
+    .dark .data-table th { background-color: #374151 !important; color: #f3f4f6 !important; }
+    .dark .data-table td { border-color: #4b5563 !important; }
+    .dark .data-table tr td { background-color: #1f2937 !important; }
+    .dark .data-table tr:nth-child(even) td { background-color: #1a2332 !important; } /* Slightly different for even rows */
+    .dark .modal-content { background-color: #1f2937; color: #d1d5db; }
+    .dark .modal-content .text-gray-600, .dark .modal-content .text-gray-700 { color: #9ca3af !important; }
+    .dark .modal-content .p-3.bg-gray-50 { background-color: #374151 !important; color: #d1d5db !important; }
+    .dark .close-modal-btn { color: #9ca3af; }
+    .dark .close-modal-btn:hover { color: #e5e7eb; }
+    .dark .modal-content span:not([class*="text-"]) { color: #d1d5db; }
+    .dark .modal-content h2, .dark .modal-content h3 { color: #f3f4f6 !important; }
+    .dark #darkModeToggle { background-color: #374151; color: #d1d5db; }
+    .dark #darkModeToggle:hover { background-color: #4b5563; }
+    .dark .tab-btn { color: #9ca3af; }
+    .dark .tab-btn.text-blue-600 { color: #60a5fa !important; } /* lighter blue for dark */
+    .dark .tab-btn.border-blue-600 { border-color: #60a5fa !important; }
+    .dark .tab-btn:hover:not(.text-blue-600) { color: #93c5fd; }
+    /* Dark mode header sections */
+    .dark .header-main-background { background-color: #1f2937; } /* gray-800 */
+    .dark .header-tabs-background { background-color: #1f2937; /* border-bottom: 1px solid #374151; */ }
+    .dark .header-tabs-background .border-t { border-color: #374151 !important; }
+
+
+/* --- LIGHT MODE (when body does NOT have .dark) --- */
+body:not(.dark) { background-color: #f3f4f6; color: #111827; } /* gray-100, gray-900 */
+    body:not(.dark) .bg-white { background-color: #ffffff !important; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.05), 0 1px 2px 0 rgba(0,0,0,0.03); }
+    /* Light mode header sections */
+    body:not(.dark) .header-main-background { background-color: #2563eb; /* blue-600 */ }
+    body:not(.dark) .header-main-background .header-title { color: #ffffff !important; }
+    body:not(.dark) .header-main-background .header-subtitle { color: #dbeafe !important; /* blue-100 */ }
+    body:not(.dark) .header-main-background #darkModeToggle { background-color: #1d4ed8; color: #ffffff; border: 1px solid #1e429f;}
+    body:not(.dark) .header-main-background #darkModeToggle:hover { background-color: #1e429f; }
+    body:not(.dark) .header-tabs-background { background-color: #ffffff; border-bottom: 1px solid #e5e7eb; }
+    body:not(.dark) .header-tabs-background .border-t { border-color: transparent !important; } /* Hide top border if it looks weird */
+
+    body:not(.dark) .text-gray-700, body:not(.dark) .text-gray-600 { color: #374151 !important; }
+    body:not(.dark) .text-gray-500 { color: #6b7280 !important; }
+    body:not(.dark) .form-control, body:not(.dark) input, body:not(.dark) select, body:not(.dark) textarea {
+        background-color: #ffffff; color: #111827; border-color: #d1d5db;
+    }
+    body:not(.dark) input::placeholder, body:not(.dark) textarea::placeholder { color: #9ca3af; }
+    body:not(.dark) .btn-primary { background-color: #2563eb; color: white; } /* blue-600 */
+    body:not(.dark) .btn-primary:hover { background-color: #1d4ed8; } /* blue-700 */
+    body:not(.dark) .btn-secondary { background-color: #e5e7eb; color: #374151; border: 1px solid #d1d5db; }
+    body:not(.dark) .btn-secondary:hover { background-color: #d1d5db; }
+    body:not(.dark) .border-gray-200 { border-color: #e5e7eb !important; }
+    body:not(.dark) .bg-gray-50 { background-color: #f9fafb !important; }
+    body:not(.dark) .data-table th { background-color: #f3f4f6 !important; color: #374151 !important; }
+    body:not(.dark) .data-table td { border-color: #e5e7eb !important; }
+    body:not(.dark) .data-table tr td { background-color: #ffffff !important; color: #1f2937; }
+    body:not(.dark) .data-table tr:nth-child(even) td { background-color: #f9fafb !important; }
+    body:not(.dark) .modal-content { background-color: #ffffff; color: #111827; }
+    body:not(.dark) .modal-content .text-gray-600, body:not(.dark) .modal-content .text-gray-700 { color: #374151 !important; }
+    body:not(.dark) .modal-content .p-3.bg-gray-50 { background-color: #f9fafb !important; color: #374151 !important; }
+    body:not(.dark) .close-modal-btn { color: #6b7280; }
+    body:not(.dark) .close-modal-btn:hover { color: #111827; }
+    body:not(.dark) .modal-content span:not([class*="text-"]) { color: #1f2937; }
+    body:not(.dark) .modal-content h2, body:not(.dark) .modal-content h3 { color: #111827 !important; }
+    /* body:not(.dark) #darkModeToggle defined above with header-main-background */
+    body:not(.dark) .tab-btn { color: #4b5563; }
+    body:not(.dark) .tab-btn.text-blue-600 { color: #2563eb !important; }
+    body:not(.dark) .tab-btn.border-blue-600 { border-color: #2563eb !important; }
+    body:not(.dark) .tab-btn:hover:not(.text-blue-600) { color: #1d4ed8; }
+    body:not(.dark) #cruceResults .border { border-color: #e5e7eb; }
+    body:not(.dark) #cruceResults .text-blue-600 { color: #2563eb !important; }
+    body:not(.dark) #cruceResults .text-gray-500 { color: #6b7280 !important; }
+    body:not(.dark) #cruceResults .text-gray-600 { color: #4b5563 !important; }
+    body:not(.dark) #cruceResults .border-b { border-color: #f3f4f6; }
+
+.thumbnail-image { width: 150px; height: 100px; object-fit: cover; border-radius: 0.375rem; }
+.property-image-preview { max-width: 250px; max-height: 180px; margin-top: 0.75rem; border: 1px solid #d1d5db; padding: 0.25rem; border-radius: 0.375rem; }
+.dark .property-image-preview { border-color: #4b5563; }
+.modal-property-image { max-width: 100%; max-height: 350px; object-fit: contain; margin-bottom: 1rem; border-radius: 0.375rem; }
+
+.matched-property-thumbnail { 
+    width: 150px; /* Increased */
+    height: 110px; /* Increased */
+    object-fit: cover; border-radius: 0.375rem; margin-right: 1rem; cursor: pointer; 
+    border: 1px solid #e5e7eb;
+}
+.dark .matched-property-thumbnail { border-color: #4b5563; }
+
+.btn-link {
+    background-color: #10b981; color: white; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer;
+    text-decoration: none; display: inline-flex; align-items: center; font-weight: 500;
+}
+.btn-link:hover { background-color: #059669; }
+.btn-link[disabled] { background-color: #9ca3af; cursor: not-allowed; }
+body:not(.dark) .btn-link { background-color: #10b981; }
+body:not(.dark) .btn-link:hover { background-color: #059669; }
+body:not(.dark) .btn-link[disabled] { background-color: #d1d5db; color: #6b7280; }
+
+#darkModeToggle { padding: 0.5rem; /* Smaller padding */ }
+#darkModeToggle svg { height: 1.25rem; width: 1.25rem; } /* 5 in Tailwind units */
+
+/* Estilo para el botón de WhatsApp */
+.btn-whatsapp {
+    background-color: #25D366; color: white; padding: 0.3rem 0.6rem; border-radius: 0.375rem;
+    text-decoration: none; display: inline-flex; align-items: center; font-weight: 500;
+    font-size: 0.75rem; /* text-xs */
+    line-height: 1rem; /* text-xs */
+    transition: background-color 0.2s;
+}
+.btn-whatsapp:hover { background-color: #1DA851; }
+.btn-whatsapp svg { margin-right: 0.25rem; /* mr-1 */ }
+.dark .btn-whatsapp { background-color: #128C7E; } /* Darker green for dark mode */
+.dark .btn-whatsapp:hover { background-color: #075E54; }
+
+/* =============================================
+   SIDEBAR LAYOUT — Full-screen App Shell
+   ============================================= */
+html, body { height: 100%; overflow: hidden; margin: 0; padding: 0; }
+#app-shell { display: flex; height: 100vh; width: 100vw; overflow: hidden; }
+
+/* -- Sidebar -- */
+#sidebar {
+    width: 240px; min-width: 240px; height: 100vh;
+    display: flex; flex-direction: column;
+    background-color: #0f172a;
+    border-right: 1px solid #1e293b;
+    transition: width 0.25s ease, min-width 0.25s ease;
+    overflow: hidden; z-index: 40; flex-shrink: 0;
+}
+#sidebar.collapsed { width: 60px; min-width: 60px; }
+
+.sidebar-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.875rem 0.75rem; border-bottom: 1px solid #1e293b;
+    min-height: 62px; flex-shrink: 0;
+}
+.sidebar-brand { display: flex; align-items: center; gap: 0.6rem; overflow: hidden; white-space: nowrap; }
+.sidebar-brand > svg { min-width: 24px; flex-shrink: 0; color: #3b82f6; }
+.sidebar-brand-text { font-weight: 700; font-size: 0.875rem; color: #f1f5f9; letter-spacing: 0.07em; }
+.sidebar-brand-sub { font-size: 0.63rem; color: #475569; white-space: nowrap; line-height: 1.2; }
+
+#toggleSidebar {
+    background: none; border: none; cursor: pointer; color: #475569;
+    padding: 0.3rem; border-radius: 0.25rem; flex-shrink: 0;
+    transition: color 0.2s, background-color 0.2s;
+}
+#toggleSidebar:hover { color: #e2e8f0; background-color: #1e293b; }
+#toggleSidebar svg { transition: transform 0.25s; display: block; }
+#sidebar.collapsed #toggleSidebar svg { transform: rotate(180deg); }
+
+.sidebar-nav {
+    flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0.5rem 0;
+    scrollbar-width: thin; scrollbar-color: #1e293b transparent;
+}
+.sidebar-nav::-webkit-scrollbar { width: 4px; }
+.sidebar-nav::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 2px; }
+
+.sidebar-nav-group-label {
+    font-size: 0.62rem; font-weight: 600; color: #475569;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    padding: 0.875rem 1rem 0.3rem; white-space: nowrap; overflow: hidden;
+}
+#sidebar.collapsed .sidebar-nav-group-label { opacity: 0; height: 0; padding: 0; }
+
+.sidebar-nav button.tab-btn {
+    display: flex; align-items: center; gap: 0.75rem;
+    width: 100%; padding: 0.6rem 1rem;
+    background: none; border: none; cursor: pointer;
+    color: #94a3b8; font-weight: 500; font-size: 0.82rem;
+    white-space: nowrap; overflow: hidden;
+    transition: background-color 0.15s, color 0.15s;
+    border-left: 3px solid transparent; text-align: left;
+}
+.sidebar-nav button.tab-btn:hover { color: #e2e8f0; background-color: #1e293b; }
+.sidebar-nav button.tab-btn.active { color: #60a5fa !important; background-color: rgba(59,130,246,0.1); border-left-color: #3b82f6 !important; }
+.sidebar-nav button.tab-btn svg { min-width: 18px; flex-shrink: 0; }
+
+.sidebar-footer { padding: 0.4rem 0; border-top: 1px solid #1e293b; flex-shrink: 0; }
+.sidebar-footer-btn {
+    display: flex; align-items: center; gap: 0.75rem;
+    width: 100%; padding: 0.6rem 1rem;
+    background: none; border: none; cursor: pointer;
+    color: #94a3b8; font-size: 0.82rem; font-weight: 500;
+    white-space: nowrap; overflow: hidden;
+    transition: background-color 0.15s, color 0.15s; text-align: left;
+}
+.sidebar-footer-btn:hover { color: #e2e8f0; background-color: #1e293b; }
+.sidebar-footer-btn svg { min-width: 18px; flex-shrink: 0; }
+#logout-button.sidebar-footer-btn { color: #f87171; }
+#logout-button.sidebar-footer-btn:hover { color: #fca5a5; background-color: rgba(239,68,68,0.08); }
+#darkModeToggle.sidebar-footer-btn { background: none !important; }
+
+/* === NOTIFICATION BADGES === */
+.nav-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 18px; height: 18px; padding: 0 4px;
+    border-radius: 9px; font-size: 0.65rem; font-weight: 700;
+    background: #ef4444; color: #fff; line-height: 1;
+    margin-left: auto; flex-shrink: 0;
+    animation: badge-pop 0.3s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes badge-pop {
+    0%   { transform: scale(0); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+}
+.nav-badge.orange { background: #f97316; }
+.nav-badge.blue   { background: #3b82f6; }
+#sidebar.collapsed .nav-badge { position: absolute; top: 4px; right: 6px; min-width: 14px; height: 14px; font-size: 0.55rem; }
+.sidebar-nav button.tab-btn { position: relative; }
+
+/* === NOTIFICATION BELL (top-right corner) === */
+#notifBellContainer {
+    position: fixed; top: 14px; right: 18px; z-index: 500;
+}
+#notifBell {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: #1e293b; border: 1px solid #334155;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: background 0.15s;
+    position: relative;
+}
+#notifBell:hover { background: #334155; }
+#notifBellCount {
+    position: absolute; top: -5px; right: -5px;
+    min-width: 18px; height: 18px; padding: 0 4px;
+    border-radius: 9px; font-size: 0.65rem; font-weight: 700;
+    background: #ef4444; color: #fff; display: flex;
+    align-items: center; justify-content: center; line-height: 1;
+    border: 2px solid #0f172a;
+    animation: badge-pop 0.3s cubic-bezier(0.34,1.56,0.64,1);
+}
+#notifBellCount.hidden { display: none; }
+#notifPanel {
+    position: fixed; top: 60px; right: 14px; z-index: 500;
+    width: 340px; max-height: 480px;
+    background: #1e293b; border: 1px solid #334155;
+    border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    overflow: hidden; display: flex; flex-direction: column;
+    animation: slide-down 0.18s ease;
+}
+@keyframes slide-down {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+#notifPanel.hidden { display: none; }
+#notifPanelBody { overflow-y: auto; max-height: 420px; flex: 1; }
+.notif-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 12px 14px; border-bottom: 1px solid #334155;
+    cursor: pointer; transition: background 0.12s;
+}
+.notif-item:last-child { border-bottom: none; }
+.notif-item:hover { background: #273548; }
+.notif-icon { font-size: 1.2rem; flex-shrink: 0; padding-top: 1px; }
+.notif-text .notif-title { font-size: 0.78rem; font-weight: 600; color: #e2e8f0; }
+.notif-text .notif-sub   { font-size: 0.7rem; color: #94a3b8; margin-top: 1px; }
+
+/* Hide labels/text when collapsed */
+#sidebar.collapsed .nav-label,
+#sidebar.collapsed .sidebar-brand-text,
+#sidebar.collapsed .sidebar-brand-sub { display: none; }
+
+/* Main content */
+#main-content {
+    flex: 1; overflow-y: auto; overflow-x: hidden;
+    height: 100vh; display: flex; flex-direction: column; min-width: 0;
+}
+#main-content > main { flex: 1; padding: 2rem; }
+#main-content > footer { padding: 1rem 2rem; font-size: 0.8rem; border-top: 1px solid #1e293b; color: #475569; text-align: center; flex-shrink: 0; }
+.dark #main-content > footer { background-color: #0f172a; }
+body:not(.dark) #main-content > footer { background-color: #ffffff; border-top-color: #e5e7eb; color: #6b7280; }
+
+/* Light mode sidebar */
+body:not(.dark) #sidebar { background-color: #1e3a5f; border-right-color: #1d4ed8; }
+body:not(.dark) .sidebar-header { border-bottom-color: rgba(255,255,255,0.1); }
+body:not(.dark) .sidebar-brand-text { color: #ffffff; }
+body:not(.dark) .sidebar-brand-sub { color: #93c5fd; }
+body:not(.dark) .sidebar-nav-group-label { color: #93c5fd; }
+body:not(.dark) .sidebar-nav button.tab-btn { color: #bfdbfe; }
+body:not(.dark) .sidebar-nav button.tab-btn:hover { color: #ffffff; background-color: rgba(255,255,255,0.1); }
+body:not(.dark) .sidebar-nav button.tab-btn.active { color: #ffffff !important; background-color: rgba(255,255,255,0.15); border-left-color: #ffffff !important; }
+body:not(.dark) .sidebar-footer { border-top-color: rgba(255,255,255,0.1); }
+body:not(.dark) .sidebar-footer-btn { color: #bfdbfe; }
+body:not(.dark) .sidebar-footer-btn:hover { color: #ffffff; background-color: rgba(255,255,255,0.1); }
+body:not(.dark) #logout-button.sidebar-footer-btn { color: #fca5a5; }
+body:not(.dark) #toggleSidebar { color: #93c5fd; }
+body:not(.dark) #toggleSidebar:hover { color: #ffffff; background-color: rgba(255,255,255,0.1); }
+body:not(.dark) #main-content { background-color: #f3f4f6; }
+
+/* Collapsible form panels */
+.collapsible-form-panel {
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.4s ease, opacity 0.3s ease;
+    pointer-events: none;
+}
+.collapsible-form-panel.open {
+    max-height: 3000px;
+    opacity: 1;
+    pointer-events: all;
+    margin-bottom: 2rem;
+}
+.form-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 1.25rem;
+    border-radius: 0.5rem;
+    background: #1a56db;
+    color: white;
+    font-weight: 600;
+    font-size: 0.875rem;
+    border: none;
+    cursor: pointer;
+    transition: background 0.2s;
+    margin-bottom: 1.25rem;
+}
+.form-toggle-btn:hover { background: #1e429f; }
+.form-toggle-btn.open { background: #4b5563; }
+.form-toggle-btn.open:hover { background: #374151; }
+.form-toggle-btn .toggle-icon { transition: transform 0.3s ease; flex-shrink: 0; }
+.form-toggle-btn.open .toggle-icon { transform: rotate(45deg); }
+.dark .form-toggle-btn:not(.open) { background: #3b82f6; }
+.dark .form-toggle-btn:not(.open):hover { background: #2563eb; }
+
+</style>
+
+</head>
+<body class="dark">
+<div id="app-shell">
+
+<!-- ===== SIDEBAR ===== -->
+<aside id="sidebar">
+    <div class="sidebar-header">
+        <div class="sidebar-brand">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            <div>
+                <div class="sidebar-brand-text">INMOBASE</div>
+                <div class="sidebar-brand-sub">CRM Inmobiliario</div>
+            </div>
+        </div>
+        <button id="toggleSidebar" title="Colapsar menú">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+    </div>
+
+    <nav class="sidebar-nav">
+        <div class="sidebar-nav-group-label">Gestión</div>
+
+        <button class="tab-btn" data-tab="compradores">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span class="nav-label">Clientes Compradores</span>
+            <span id="badge-compradores" class="nav-badge orange hidden"></span>
+        </button>
+
+        <button class="tab-btn" data-tab="vendedores">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            <span class="nav-label">Propiedades</span>
+        </button>
+
+        <button class="tab-btn" data-tab="colaboradores">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M2 20a10 10 0 0 1 20 0"/></svg>
+            <span class="nav-label">Colaboradores</span>
+        </button>
+
+        <button class="tab-btn" data-tab="seguimientoParticulares">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span class="nav-label">Seguimiento Particulares</span>
+            <span id="badge-seguimientoParticulares" class="nav-badge hidden"></span>
+        </button>
+
+        <button class="tab-btn" data-tab="kanban">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="15" rx="1"/></svg>
+            <span class="nav-label">Pipeline Kanban</span>
+        </button>
+
+        <button class="tab-btn" data-tab="cartera">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+            <span class="nav-label">Cartera</span>
+        </button>
+
+        <div class="sidebar-nav-group-label">Visión General</div>
+
+        <button class="tab-btn" data-tab="metricas">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span class="nav-label">Métricas de Usuario</span>
+        </button>
+
+        <button id="adminNavBtn" class="tab-btn hidden" data-tab="adminPanel">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <span class="nav-label">Panel Supervisión</span>
+        </button>
+
+        <button class="tab-btn" data-tab="dashboard">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            <span class="nav-label">Dashboard</span>
+        </button>
+
+        <button class="tab-btn" data-tab="analytics">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            <span class="nav-label">Analytics</span>
+        </button>
+
+        <div class="sidebar-nav-group-label">Análisis</div>
+
+        <button class="tab-btn" data-tab="database">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+            <span class="nav-label">Base de Datos Clientes</span>
+        </button>
+
+        <button class="tab-btn" data-tab="cruce">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+            <span class="nav-label">Cruce Clientes-Propiedades</span>
+        </button>
+
+        <button class="tab-btn" data-tab="cruceCartera">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+            <span class="nav-label">Cruce Clientes-Cartera</span>
+        </button>
+
+        <div class="sidebar-nav-group-label">Sistema</div>
+
+        <button class="tab-btn" data-tab="configuracion">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M12 2v2M12 20v2M20 12h2M2 12h2M17.66 17.66l-1.41-1.41M6.34 6.34L4.93 4.93M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+            <span class="nav-label">Configuración</span>
+        </button>
+    </nav>
+
+    <div class="sidebar-footer">
+        <button id="darkModeToggle" class="sidebar-footer-btn">
+            <span id="darkModeIcon"></span>
+            <span class="nav-label">Modo oscuro</span>
+        </button>
+        <button id="logout-button" class="sidebar-footer-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            <span class="nav-label">Cerrar sesión</span>
+        </button>
+    </div>
+</aside>
+
+<!-- ===== MAIN CONTENT ===== -->
+<div id="main-content">
+<!-- Banner de Supervisión (visible solo cuando el admin entra a una cuenta de comercial) -->
+<div id="supervisionBanner" class="hidden flex items-center justify-between px-4 py-2" style="background:#7c3aed;color:white;font-size:0.82rem;flex-shrink:0">
+    <div class="flex items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <strong>MODO SUPERVISIÓN:</strong> <span id="supervisionUserName">—</span>
+    </div>
+    <button onclick="exitSupervisionMode()" class="text-white underline text-xs hover:text-purple-200">↩ Salir y volver a mi cuenta</button>
+</div>
+<main>
+    <div id="compradoresTab" class="tab-content">
+        <div class="flex flex-wrap gap-3 mb-4">
+            <button id="toggleClientFormBtn" class="form-toggle-btn" style="margin-bottom:0" onclick="toggleFormPanel('clientFormPanel','toggleClientFormBtn')">
+                <svg class="toggle-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>Añadir Cliente Comprador</span>
+            </button>
+            <button id="toggleClientImportBtn" class="form-toggle-btn" style="margin-bottom:0;background:#059669" onclick="toggleFormPanel('clientImportPanel','toggleClientImportBtn')">
+                <svg class="toggle-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/><polyline points="7 17 12 22 17 17"/></svg>
+                <span>Importar / Exportar</span>
+            </button>
+        </div>
+        <div id="clientImportPanel" class="collapsible-form-panel">
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-4">
+            <h2 class="text-lg font-semibold mb-1">Importar / Exportar Clientes Compradores</h2>
+            <p class="text-sm text-gray-500 mb-4">Importa desde un CSV de <strong>Demandas</strong> (CRM) o desde un CSV/XLSX de <strong>Clientes Calificados</strong> (hoja de cálculo). También puedes exportar el listado actual.</p>
+            <div class="flex flex-wrap gap-3">
+                <button id="importClientsDemandCSVTriggerBtn" class="btn-secondary text-sm py-2 px-3">↑ Importar Demandas (CSV)</button>
+                <button id="importClientsCalifCSVTriggerBtn" class="btn-secondary text-sm py-2 px-3">↑ Importar Calificados (CSV/XLSX)</button>
+                <button id="exportClientsCSVBtn" class="btn-primary text-sm py-2 px-3">↓ Exportar CSV</button>
+                <button id="exportClientsXLSXBtn" class="btn-primary text-sm py-2 px-3">↓ Exportar XLSX</button>
+                <button onclick="toggleFormPanel('clientImportPanel','toggleClientImportBtn')" class="btn-secondary text-sm py-2 px-3">✕ Cerrar</button>
+            </div>
+            <input type="file" id="importClientsDemandCSVInput" class="hidden" accept=".csv">
+            <input type="file" id="importClientsCalifCSVInput" class="hidden" accept=".csv,.xlsx,.xls">
+            <!-- Paste from Excel -->
+            <hr class="my-4">
+            <p class="text-sm font-medium text-gray-700 mb-2">📋 Pegar desde Excel / XLSX</p>
+            <p class="text-xs text-gray-500 mb-2">Selecciona las filas en Excel, cópialas con <strong>Ctrl+C</strong> y pégalas aquí con <strong>Ctrl+V</strong>.</p>
+            <textarea id="clientPasteArea" class="form-control text-xs font-mono" rows="6" placeholder="Pega aquí el contenido copiado de Excel (filas del formato Demandas CRM)..."></textarea>
+            <div class="flex gap-3 mt-3">
+                <button id="importClientsPasteBtn" class="btn-primary text-sm py-2 px-3">↑ Importar pegado</button>
+                <button type="button" onclick="document.getElementById('clientPasteArea').value=''" class="btn-secondary text-sm py-2 px-3">🗑 Limpiar</button>
+            </div>
+        </div>
+        </div><!-- /clientImportPanel -->
+        <div id="clientFormPanel" class="collapsible-form-panel">
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-6" id="formTitle">Añadir Nuevo Cliente Comprador</h2>
+            <form id="buyerClientForm">
+                <input type="hidden" id="clientId">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
+                    <div class="form-group">
+                        <label class="form-label" for="clientName">Nombre Completo</label>
+                        <input type="text" id="clientName" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="clientPhone">Teléfono</label>
+                        <input type="tel" id="clientPhone" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="clientEmail">Correo Electrónico</label>
+                        <input type="email" id="clientEmail" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="clientPriceMax">Precio Máximo (€)</label>
+                        <input type="number" id="clientPriceMax" class="form-control" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="clientZone">Zona(s) de Interés</label>
+                        <input type="text" id="clientZone" class="form-control" placeholder="Ej: Centro, Playa, Montaña">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="mortgageApproved">Hipoteca Aprobada</label>
+                        <select id="mortgageApproved" class="form-control">
+                            <option value="no">No</option>
+                            <option value="si">Sí</option>
+                            <option value="en_proceso">En Proceso</option>
+                            <option value="no_necesita">No Necesita</option>
+                        </select>
+                    </div>
+                     <div class="form-group">
+                        <label class="form-label" for="clientContribution">Aportación (€)</label>
+                        <input type="number" id="clientContribution" class="form-control" min="0" placeholder="Aportación inicial del cliente">
+                    </div>
+                     <div class="form-group">
+                        <label class="form-label" for="clientStatusForm">Estado del Cliente</label>
+                        <select id="clientStatusForm" class="form-control">
+                            <option value="seguimiento">Seguimiento</option>
+                            <option value="activo">Activo</option>
+                            <option value="no_activo">No Activo</option>
+                            <option value="descartado">Descartado</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="clientNumRooms">Nº de Habitaciones Deseadas</label>
+                        <input type="text" id="clientNumRooms" class="form-control" placeholder="Ej: 3, 2 o 3, Estudio, 4+">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="clientElevator">Ascensor (Preferencia Cliente)</label>
+                        <select id="clientElevator" class="form-control">
+                            <option value="indiferente">Indiferente / No especificado</option>
+                            <option value="si">Sí, es indispensable</option>
+                            <option value="no">No es indispensable (OK sin él)</option>
+                            <option value="no_indispensable_1">No indispensable hasta un 1º</option>
+                            <option value="no_indispensable_2">No indispensable hasta un 2º</option>
+                            <option value="no_indispensable_3">No indispensable hasta un 3º</option>
+                            <option value="no_indispensable_4">No indispensable hasta un 4º</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="clientMinSqMeters">Metros Mínimos (m²)</label>
+                        <input type="number" id="clientMinSqMeters" class="form-control" min="0" placeholder="Ej: 70">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="clientMaxSqMeters">Metros Máximos (m²)</label>
+                        <input type="number" id="clientMaxSqMeters" class="form-control" min="0" placeholder="Ej: 120">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="clientFecha">Fecha de Alta</label>
+                        <input type="date" id="clientFecha" class="form-control">
+                    </div>
+                </div>
+                <div class="form-group mt-6 col-span-1 md:col-span-2">
+                    <label class="form-label" for="clientComments">Comentarios Adicionales (Cliente)</label>
+                    <textarea id="clientComments" rows="4" class="form-control"></textarea>
+                </div>
+                <div class="mt-8 flex flex-wrap gap-3">
+                    <button type="button" id="saveClientBtn" class="btn-primary">Guardar Cliente</button>
+                    <button type="button" id="newClientBtn" class="btn-secondary">Nuevo Cliente (Limpiar Formulario)</button>
+                    <button type="button" onclick="toggleFormPanel('clientFormPanel','toggleClientFormBtn')" class="btn-secondary">✕ Cerrar</button>
+                </div>
+            </form>
+        </div>
+        </div><!-- /clientFormPanel -->
+
+        <div class="bg-white rounded-lg shadow-lg p-6 mt-4">
+            <h2 class="text-xl font-semibold mb-6">Listado de Clientes Compradores</h2>
+            <div class="mb-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-5 items-end">
+                <div class="form-group m-0">
+                    <label for="filterStatus_c" class="form-label text-sm">Filtrar por estado</label>
+                    <select id="filterStatus_c" class="form-control">
+                        <option value="todos">Todos</option>
+                        <option value="activo">Activo</option>
+                        <option value="no_activo">No Activo</option>
+                        <option value="seguimiento">Seguimiento</option>
+                        <option value="descartado">Descartado</option>
+                    </select>
+                </div>
+                <div class="form-group m-0">
+                    <label for="filterZone_c" class="form-label text-sm">Filtrar por zona</label>
+                    <input type="text" id="filterZone_c" class="form-control" placeholder="Buscar por zona">
+                </div>
+                <div class="form-group m-0">
+                    <label for="filterNumRooms_c" class="form-label text-sm">Nº Habitaciones (Cliente)</label>
+                    <select id="filterNumRooms_c" class="form-control">
+                        <option value="todos">Todas</option>
+                        <option value="0">0 (Estudio)</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5+</option>
+                    </select>
+                </div>
+                <div class="form-group m-0">
+                    <label for="filterPriceMin_c" class="form-label text-sm">Precio Máx. Cliente (€) Desde</label>
+                    <input type="number" id="filterPriceMin_c" class="form-control" placeholder="Mínimo">
+                </div>
+                <div class="form-group m-0">
+                    <label for="filterPriceMax_c" class="form-label text-sm">Precio Máx. Cliente (€) Hasta</label>
+                    <input type="number" id="filterPriceMax_c" class="form-control" placeholder="Máximo">
+                </div>
+                <div class="form-group m-0">
+                    <label for="filterElevator_c" class="form-label text-sm">Ascensor (Preferencia Cliente)</label>
+                    <select id="filterElevator_c" class="form-control">
+                        <option value="todos">Todos</option>
+                        <option value="si">Sí (Indispensable)</option>
+                        <option value="no">No indispensable (General)</option>
+                        <option value="no_indispensable_1">No indispensable hasta un 1º</option>
+                        <option value="no_indispensable_2">No indispensable hasta un 2º</option>
+                        <option value="no_indispensable_3">No indispensable hasta un 3º</option>
+                        <option value="no_indispensable_4">No indispensable hasta un 4º</option>
+                        <option value="indiferente">Indiferente</option>
+                    </select>
+                </div>
+                <div class="md:col-span-3 mt-4">
+                    <button id="resetFiltersBtn_c" class="btn-secondary w-full md:w-auto">Resetear Filtros</button>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table id="clientsTable_c" class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Teléfono</th>
+                            <th>Email</th>
+                            <th>Precio Máx.</th>
+                            <th>Aportación</th>
+                            <th>Zona</th>
+                            <th>Hipoteca</th>
+                            <th>Estado</th>
+                            <th>Hab. Des.</th>
+                            <th>Ascensor Pref.</th>
+                            <th>m² Min</th>
+                            <th>m² Max</th>
+                            <th>Fecha</th>
+                            <th>Documento</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div id="noDataMessage_c" class="py-8 text-center text-gray-500" style="display: none;">
+                No hay clientes en la base de datos que coincidan con los filtros.
+            </div>
+        </div>
+    </div>
+
+    <div id="vendedoresTab" class="tab-content"> <!-- Renombrada para claridad -->
+        <div class="flex flex-wrap gap-3 mb-4">
+        <button id="togglePropertyFormBtn" class="form-toggle-btn" style="margin-bottom:0" onclick="toggleFormPanel('propertyFormPanel','togglePropertyFormBtn')">
+            <svg class="toggle-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>Añadir Nueva Propiedad</span>
+        </button>
+        <button id="togglePropertyImportBtn" class="form-toggle-btn" style="margin-bottom:0;background:#059669" onclick="toggleFormPanel('propertyImportPanel','togglePropertyImportBtn')">
+            <svg class="toggle-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/><polyline points="7 17 12 22 17 17"/></svg>
+            <span>Importar / Exportar</span>
+        </button>
+        </div>
+        <div id="propertyImportPanel" class="collapsible-form-panel">
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-4">
+            <h2 class="text-lg font-semibold mb-1">Importar / Exportar Propiedades</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                <div class="border border-dashed border-gray-300 rounded-lg p-4">
+                    <h3 class="font-semibold text-sm mb-1">Importar desde Cartera (CSV / XLSX)</h3>
+                    <p class="text-xs text-gray-400 mb-3">Formato: <em>Ref., Oper., Tipo, €, Pre agencia, preProp, Dirección, Zona, Dor, Baño, asc., park, aseo, balcon, útil, const., Propietario, Tel, Fec. Alta, Estado, Comentario</em></p>
+                    <div class="flex flex-wrap gap-2">
+                        <button id="importPropertiesCSVTriggerBtn" class="btn-secondary text-sm py-2 px-3">↑ Importar CSV</button>
+                        <input type="file" id="importPropertiesCSVInput" class="hidden" accept=".csv,.txt">
+                        <button id="importPropertiesXLSXTriggerBtn" class="btn-secondary text-sm py-2 px-3">↑ Importar XLSX</button>
+                        <input type="file" id="importPropertiesXLSXInput" class="hidden" accept=".xlsx,.xls">
+                    </div>
+                </div>
+                <div class="border border-dashed border-gray-300 rounded-lg p-4">
+                    <h3 class="font-semibold text-sm mb-3">Exportar listado actual</h3>
+                    <div class="flex flex-wrap gap-2">
+                        <button id="exportPropertiesCSVBtn" class="btn-primary text-sm py-2 px-3">↓ Exportar CSV</button>
+                        <button id="exportPropertiesXLSXBtn" class="btn-primary text-sm py-2 px-3">↓ Exportar XLSX</button>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-4 border border-dashed border-blue-300 rounded-lg p-4">
+                <h3 class="font-semibold text-sm mb-1">Pegar formato interno (COR-XXXX-OA / DA)</h3>
+                <p class="text-xs text-gray-400 mb-2">Pega directamente desde el CRM interno. Columnas: Ref · Operación · Tipo · Precio · … · Dirección · Zona · Hab · Baños · Asc · … · m²Min · m²Max · Nombre · Tel · Fecha · Estado · Comentario</p>
+                <textarea id="propertiesPasteArea" class="form-control text-xs font-mono" rows="6" placeholder="Pega aquí las filas COR-4078-OA&#9;Venta&#9;Piso&#9;469.000 €&#9;..."></textarea>
+                <div class="flex gap-2 mt-2">
+                    <button id="importPropertiesPasteBtn" class="btn-primary text-sm py-2 px-3">↑ Importar Pegado</button>
+                    <button type="button" onclick="document.getElementById('propertiesPasteArea').value=''" class="btn-secondary text-sm py-2 px-3">🗑 Limpiar</button>
+                </div>
+            </div>
+            <button onclick="toggleFormPanel('propertyImportPanel','togglePropertyImportBtn')" class="btn-secondary text-sm py-1 px-3 mt-3">✕ Cerrar</button>
+        </div>
+        </div><!-- /propertyImportPanel -->
+        <div id="propertyFormPanel" class="collapsible-form-panel">
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-6" id="propertyFormTitle">Añadir Nueva Propiedad (Captada/Colaborador)</h2>
+            <form id="propertyForm">
+                <input type="hidden" id="propertyId">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
+                    <div class="form-group">
+                        <label class="form-label" for="propertyRef">Referencia (COR-XXXX-OA)</label>
+                        <input type="text" id="propertyRef" class="form-control" placeholder="Ej: COR-4078-OA">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="propertyAddress">Dirección / Referencia</label>
+                        <input type="text" id="propertyAddress" class="form-control" required placeholder="Ej: Calle Falsa 123, Ático B">
+                    </div>
+                     <div class="form-group">
+                        <label class="form-label" for="propertyPrice">Precio de Venta (€)</label>
+                        <input type="number" id="propertyPrice" class="form-control" min="0" required>
+                    </div>
+                     <div class="form-group">
+                        <label class="form-label" for="sellerName">Nombre Vendedor/Agencia</label>
+                        <input type="text" id="sellerName" class="form-control" placeholder="Nombre del particular o de la agencia">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="sellerPhone">Teléfono del Vendedor/Agencia</label>
+                        <input type="tel" id="sellerPhone" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="sellerType">Tipo de Vendedor/Origen</label>
+                        <select id="sellerType" class="form-control">
+                            <option value="particular">Particular (Captación propia)</option>
+                            <option value="agencia">Agencia (Colaborador)</option>
+                        </select>
+                    </div>
+                     <div class="form-group">
+                        <label class="form-label" for="propertyFloor">Planta del Inmueble</label>
+                        <input type="text" id="propertyFloor" class="form-control" placeholder="Ej: Bajo, Entresuelo, 1º, 3ºB, Ático">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="propertySqMeters">Metros Cuadrados (m²)</label>
+                        <input type="number" id="propertySqMeters" class="form-control" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="propertyRooms">Nº de Habitaciones</label>
+                        <input type="number" id="propertyRooms" class="form-control" min="0" placeholder="Ej: 3">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="propertyBaths">Nº de Baños</label>
+                        <input type="number" id="propertyBaths" class="form-control" min="0" placeholder="Ej: 2">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="propertyElevator">Ascensor</label>
+                        <select id="propertyElevator" class="form-control">
+                            <option value="indiferente">Indiferente / No consta</option>
+                            <option value="si">Sí Tiene</option>
+                            <option value="no">No Tiene</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="propertyURL">URL Anuncio (Opcional)</label>
+                        <input type="url" id="propertyURL" class="form-control" placeholder="https://...">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="propertyFecha">Fecha de Captación</label>
+                        <input type="date" id="propertyFecha" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="propertyImageFile">Imagen de la Propiedad (PNG, JPG)</label>
+                        <input type="file" id="propertyImageFile" class="form-control" accept="image/png, image/jpeg">
+                        <img id="propertyImagePreview" src="#" alt="Vista previa de imagen" class="property-image-preview hidden"/>
+                    </div>
+                </div>
+                <div class="form-group mt-6 col-span-1 md:col-span-2">
+                    <label class="form-label" for="propertyComments">Comentarios (Propiedad)</label>
+                    <textarea id="propertyComments" rows="4" class="form-control"></textarea>
+                </div>
+                <div class="mt-8 flex flex-wrap gap-3">
+                    <button type="button" id="savePropertyBtn" class="btn-primary">Guardar Propiedad</button>
+                    <button type="button" id="newPropertyBtn" class="btn-secondary">Nueva Propiedad (Limpiar)</button>
+                    <button type="button" onclick="toggleFormPanel('propertyFormPanel','togglePropertyFormBtn')" class="btn-secondary">✕ Cerrar</button>
+                </div>
+            </form>
+        </div>
+        </div><!-- /propertyFormPanel -->
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-xl font-semibold mb-6">Listado de Propiedades (Captadas/Colaboradores)</h2>
+            <div class="overflow-x-auto">
+                <table id="propertiesTable" class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Imagen</th>
+                            <th>Referencia</th>
+                            <th>Dirección</th>
+                            <th>Precio</th>
+                            <th>Vendedor/Agencia</th>
+                            <th>Tlf. Vendedor</th>
+                            <th>Origen</th>
+                            <th>Planta</th>
+                            <th>m²</th>
+                            <th>Hab.</th>
+                            <th>Baños</th>
+                            <th>Ascensor</th>
+                            <th>URL</th>
+                            <th>Fecha</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div id="noPropertiesMessage" class="py-8 text-center text-gray-500" style="display: none;">
+                No hay propiedades en la base de datos.
+            </div>
+        </div>
+    </div>
+
+    <div id="seguimientoParticularesTab" class="tab-content">
+        <div class="flex flex-wrap gap-3 mb-4">
+        <button id="togglePrivateSellerFormBtn" class="form-toggle-btn" style="margin-bottom:0" onclick="toggleFormPanel('privateSellerFormPanel','togglePrivateSellerFormBtn')">
+            <svg class="toggle-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>Añadir Vendedor Particular</span>
+        </button>
+        <button id="togglePsImportBtn" class="form-toggle-btn" style="margin-bottom:0;background:#059669" onclick="toggleFormPanel('psImportPanel','togglePsImportBtn')">
+            <svg class="toggle-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/><polyline points="7 17 12 22 17 17"/></svg>
+            <span>Importar / Exportar</span>
+        </button>
+        </div>
+        <div id="psImportPanel" class="collapsible-form-panel">
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-4">
+            <h2 class="text-lg font-semibold mb-1">Importar / Exportar Seguimiento Particulares</h2>
+            <p class="text-sm text-gray-500 mb-4">Importa desde tu hoja de cálculo (CSV o XLSX). La exportación excluye teléfonos duplicados.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="border border-dashed border-gray-300 rounded-lg p-4">
+                    <h3 class="font-semibold text-sm mb-3">Importar desde archivo externo</h3>
+                    <div class="flex flex-wrap gap-2">
+                        <button id="importPsCSVTriggerBtn" class="btn-secondary text-sm py-2 px-3">↑ Importar CSV</button>
+                        <input type="file" id="importPsCSVInput" class="hidden" accept=".csv,.txt">
+                        <button id="importPsXLSXTriggerBtn" class="btn-secondary text-sm py-2 px-3">↑ Importar XLSX</button>
+                        <input type="file" id="importPsXLSXInput" class="hidden" accept=".xlsx,.xls">
+                    </div>
+                    <p class="text-xs text-gray-400 mt-3">Columnas: <em>Numero, Nome propietario, Enlace, Comentario, PRECIO, ZONA, Situacion</em></p>
+                </div>
+                <div class="border border-dashed border-gray-300 rounded-lg p-4">
+                    <h3 class="font-semibold text-sm mb-3">Exportar (sin duplicados de teléfono)</h3>
+                    <div class="flex flex-wrap gap-2">
+                        <button id="exportPsCSVBtn" class="btn-primary text-sm py-2 px-3">↓ Exportar CSV</button>
+                        <button id="exportPsXLSXBtn" class="btn-primary text-sm py-2 px-3">↓ Exportar XLSX</button>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-4 border border-dashed border-blue-300 rounded-lg p-4">
+                <h3 class="font-semibold text-sm mb-1">Pegar desde Excel / seguimiento</h3>
+                <p class="text-xs text-gray-400 mb-2">Copia las filas directamente desde tu hoja: <em>Teléfono · (Nombre) · URL · Comentario · Fecha(DD/MM/AA) · Precio($x) · Zona · Estado</em></p>
+                <textarea id="psPasteArea" class="form-control text-xs font-mono" rows="6" placeholder="Pega aquí las filas (666 60 90 75, 62737 88 33, chat…). Cada fila separada por tabuladores."></textarea>
+                <div class="flex gap-2 mt-2">
+                    <button id="importPsPasteBtn" class="btn-primary text-sm py-2 px-3">↑ Importar Pegado</button>
+                    <button type="button" onclick="document.getElementById('psPasteArea').value=''" class="btn-secondary text-sm py-2 px-3">🗑 Limpiar</button>
+                </div>
+            </div>
+            <div class="mt-3">
+                <button onclick="toggleFormPanel('psImportPanel','togglePsImportBtn')" class="btn-secondary text-sm py-1 px-3">✕ Cerrar</button>
+            </div>
+        </div>
+        </div><!-- /psImportPanel -->
+        <div id="privateSellerFormPanel" class="collapsible-form-panel">
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-6" id="privateSellerFormTitle">Añadir Vendedor Particular para Seguimiento</h2>
+            <form id="privateSellerForm">
+                <input type="hidden" id="privateSellerId">
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
+                    <div class="form-group">
+                        <label class="form-label" for="privateSellerOwnerName">Nombre Propietario</label>
+                        <input type="text" id="privateSellerOwnerName" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="privateSellerOwnerPhone">Teléfono Propietario</label>
+                        <input type="tel" id="privateSellerOwnerPhone" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="privateSellerOwnerEmail">Email Propietario</label>
+                        <input type="email" id="privateSellerOwnerEmail" class="form-control">
+                    </div>
+                     <div class="form-group">
+                        <label class="form-label" for="privateSellerStatus">Estado Seguimiento</label>
+                        <select id="privateSellerStatus" class="form-control">
+                            <option value="sin_contactar">Sin contactar</option>
+                            <option value="seguimiento">Contactado / Seguimiento</option>
+                            <option value="activo">Interesado / Disponible</option>
+                            <option value="permiten_visitas">Permiten Visitas 🏠</option>
+                            <option value="negociando">Negociando</option>
+                            <option value="firmado">Firmado ✓</option>
+                            <option value="vendido">Vendido ✅</option>
+                            <option value="no_activo">No disponible</option>
+                        </select>
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label class="form-label" for="privateSellerPropertyAddress">Dirección Inmueble</label>
+                        <input type="text" id="privateSellerPropertyAddress" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="privateSellerPropertyZone">Zona Inmueble</label>
+                        <input type="text" id="privateSellerPropertyZone" class="form-control" placeholder="Ej: Centro, Ensanche">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="privateSellerPropertyFloor">Planta Inmueble</label>
+                        <input type="text" id="privateSellerPropertyFloor" class="form-control" placeholder="Ej: 3º, Bajo, Ático">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="privateSellerPropertyRooms">Nº Habitaciones</label>
+                        <input type="number" id="privateSellerPropertyRooms" class="form-control" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="privateSellerPropertySqMeters">Metros Cuadrados (m²)</label>
+                        <input type="number" id="privateSellerPropertySqMeters" class="form-control" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="privateSellerPropertyElevator">Ascensor</label>
+                        <select id="privateSellerPropertyElevator" class="form-control">
+                            <option value="indiferente">Indiferente / No consta</option>
+                            <option value="si">Sí Tiene</option>
+                            <option value="no">No Tiene</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="privateSellerAskingPrice">💰 Precio pedido (€)</label>
+                        <input type="number" id="privateSellerAskingPrice" class="form-control" min="0" placeholder="Ej: 285000">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="privateSellerPropertyURL">URL Anuncio (Idealista, etc.)</label>
+                        <div class="flex gap-2">
+                            <input type="url" id="privateSellerPropertyURL" class="form-control" placeholder="https://..." oninput="onPrivateSellerUrlInput(this.value)">
+                            <button type="button" id="scrapeUrlBtn" onclick="scrapePropertyUrl()" class="hidden px-3 py-1.5 rounded-lg text-sm font-semibold text-white whitespace-nowrap" style="background:#6d28d9">✨ Extraer datos</button>
+                        </div>
+                        <div id="scrapeUrlStatus" class="mt-1 text-xs hidden"></div>
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label class="form-label" for="privateSellerPropertyImageFile">Imagen Inmueble (Opcional)</label>
+                        <input type="file" id="privateSellerPropertyImageFile" class="form-control" accept="image/png, image/jpeg">
+                        <img id="privateSellerPropertyImagePreview" src="#" alt="Vista previa imagen" class="property-image-preview hidden"/>
+                    </div>
+                 </div>
+                <div class="form-group mt-6 col-span-1 md:col-span-2">
+                    <label class="form-label" for="privateSellerComments">Comentarios (Seguimiento)</label>
+                    <textarea id="privateSellerComments" rows="3" class="form-control"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="privateSellerLastContact">
+                        📅 Último contacto
+                    </label>
+                    <input type="date" id="privateSellerLastContact" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="privateSellerNextContact">
+                        🔔 Próximo seguimiento
+                    </label>
+                    <input type="date" id="privateSellerNextContact" class="form-control">
+                    <div class="mt-2 flex items-center gap-2">
+                        <label class="form-label mb-0 text-xs" for="privateSellerNextContactTime">⏰ Hora</label>
+                        <input type="time" id="privateSellerNextContactTime" class="form-control" style="max-width:130px">
+                        <button type="button" onclick="openGCalFromForm()" class="text-xs px-3 py-1 rounded-lg font-semibold text-white" style="background:#4285f4;white-space:nowrap">📅 Añadir a Google Calendar</button>
+                    </div>
+                </div>
+                <!-- SECCIÓN SITUACIÓN — visible solo al editar un particular existente -->
+                <div id="psSituacionPanel" class="hidden mt-8 p-5 rounded-xl border-2 border-indigo-200 bg-indigo-50 dark:bg-indigo-900/20 dark:border-indigo-700">
+                    <h3 class="font-semibold text-indigo-800 dark:text-indigo-200 mb-1 text-base">📌 Situación del Inmueble</h3>
+                    <p class="text-xs text-indigo-600 dark:text-indigo-300 mb-4">Pasa este inmueble directamente a otra sección con los datos ya completados.</p>
+                    <div class="flex flex-wrap gap-3">
+                        <button type="button"
+                            onclick="convertToProperty(document.getElementById('privateSellerId').value)"
+                            class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                            style="background:#0f766e">
+                            🏢 Pasar a Propiedades
+                        </button>
+                        <button type="button"
+                            onclick="convertToCartera(document.getElementById('privateSellerId').value)"
+                            class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                            style="background:#7c3aed">
+                            📋 Pasar a Cartera
+                        </button>
+                    </div>
+                </div>
+                <div class="mt-6 flex flex-wrap gap-3">
+                    <button type="button" id="savePrivateSellerBtn" class="btn-primary">Guardar Vendedor Particular</button>
+                    <button type="button" id="newPrivateSellerBtn" class="btn-secondary">Nuevo (Limpiar)</button>
+                    <button type="button" onclick="toggleFormPanel('privateSellerFormPanel','togglePrivateSellerFormBtn')" class="btn-secondary">✕ Cerrar</button>
+                </div>
+            </form>
+        </div>
+        </div><!-- /privateSellerFormPanel -->
+
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-xl font-semibold mb-6">Listado de Vendedores Particulares en Seguimiento</h2>
+            <div class="mb-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-5 items-end">
+                <div class="form-group m-0">
+                    <label for="filterPrivateSellerStatus" class="form-label text-sm">Filtrar por estado</label>
+                    <select id="filterPrivateSellerStatus" class="form-control">
+                        <option value="todos">Todos</option>
+                        <option value="sin_contactar">Sin contactar</option>
+                        <option value="seguimiento">Contactado</option>
+                        <option value="activo">Interesado</option>
+                        <option value="permiten_visitas">Permiten Visitas</option>
+                        <option value="negociando">Negociando</option>
+                        <option value="firmado">Firmado</option>
+                        <option value="vendido">Vendido</option>
+                        <option value="no_activo">No disponible</option>
+                    </select>
+                </div>
+                <div class="form-group m-0">
+                    <label for="filterPrivateSellerZone" class="form-label text-sm">Filtrar por zona inmueble</label>
+                    <input type="text" id="filterPrivateSellerZone" class="form-control" placeholder="Buscar por zona">
+                </div>
+                <div class="form-group m-0">
+                    <label for="filterPsUrgency" class="form-label text-sm">🔴 Mostrar urgentes</label>
+                    <select id="filterPsUrgency" class="form-control">
+                        <option value="todos">Todos</option>
+                        <option value="vencidos">Próx. seguimiento vencido</option>
+                        <option value="inactivos">Sin contacto (inactivos)</option>
+                    </select>
+                </div>
+                <div class="form-group m-0">
+                    <label for="psInactivityDays" class="form-label text-sm">Alerta inactividad (días)</label>
+                    <select id="psInactivityDays" class="form-control" onchange="updatePrivateSellersTable()">
+                        <option value="15">15 días</option>
+                        <option value="30" selected>30 días</option>
+                        <option value="60">60 días</option>
+                        <option value="90">90 días</option>
+                    </select>
+                </div>
+                <div class="md:col-span-4 mt-2">
+                    <button id="resetPrivateSellerFiltersBtn" class="btn-secondary w-full md:w-auto">Resetear Filtros</button>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table id="privateSellersTable" class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Propietario</th>
+                            <th>Teléfono</th>
+                            <th>Dirección Inmueble</th>
+                            <th>Zona</th>
+                            <th>Hab.</th>
+                            <th>m²</th>
+                            <th>Ascensor</th>
+                            <th>Estado</th>
+                            <th>📅 Últ. contacto</th>
+                            <th>🔔 Próx. seguim.</th>
+                            <th>URL</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div id="noPrivateSellersMessage" class="py-8 text-center text-gray-500" style="display: none;">
+                No hay vendedores particulares en seguimiento o que coincidan con los filtros.
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== KANBAN PIPELINE TAB ===== -->
+    <div id="kanbanTab" class="tab-content">
+        <div class="section-header mb-3">
+            <h2 class="section-title">Pipeline de Particulares</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400">Usa los botones para mover vendedores por el pipeline de captación</p>
+        </div>
+        <!-- Barra resumen económico -->
+        <div id="kanban-summary-bar" class="flex flex-wrap gap-2 mb-4"></div>
+        <div class="flex gap-3 overflow-x-auto pb-4" id="kanban-board" style="min-height:500px; align-items:flex-start;">
+            <div class="text-gray-400 text-sm p-6">Cargando pipeline...</div>
+        </div>
+    </div>
+    
+    <!-- ===== CARTERA TAB ===== -->
+    <div id="carteraTab" class="tab-content">
+        <div class="flex flex-wrap gap-3 mb-4">
+        <button id="toggleCarteraFormBtn" class="form-toggle-btn" style="margin-bottom:0" onclick="toggleFormPanel('carteraFormPanel','toggleCarteraFormBtn')">
+            <svg class="toggle-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>Añadir a Cartera</span>
+        </button>
+        <button id="toggleCarteraImportBtn" class="form-toggle-btn" style="margin-bottom:0;background:#059669" onclick="toggleFormPanel('carteraImportPanel','toggleCarteraImportBtn')">
+            <svg class="toggle-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/><polyline points="7 17 12 22 17 17"/></svg>
+            <span>Importar / Exportar</span>
+        </button>
+        </div>
+        <div id="carteraImportPanel" class="collapsible-form-panel">
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-4">
+            <h2 class="text-lg font-semibold mb-1">Importar / Exportar Cartera</h2>
+            <p class="text-sm text-gray-500 mb-4">Importa desde CSV o XLSX (mismo formato). La exportación excluye teléfonos duplicados.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="border border-dashed border-gray-300 rounded-lg p-4">
+                    <h3 class="font-semibold text-sm mb-3">Importar desde archivo externo</h3>
+                    <div class="flex flex-wrap gap-2">
+                        <button id="importCarteraCSVTriggerBtn" class="btn-secondary text-sm py-2 px-3">↑ Importar CSV</button>
+                        <input type="file" id="importCarteraCSVInput" class="hidden" accept=".csv,.txt">
+                        <button id="importCarteraXLSXTriggerBtn" class="btn-secondary text-sm py-2 px-3">↑ Importar XLSX</button>
+                        <input type="file" id="importCarteraXLSXInput" class="hidden" accept=".xlsx,.xls">
+                    </div>
+                    <p class="text-xs text-gray-400 mt-3">Columnas: <em>Numero, Nome propietario, Enlace, Comentario, PRECIO, ZONA, Situacion</em></p>
+                </div>
+                <div class="border border-dashed border-gray-300 rounded-lg p-4">
+                    <h3 class="font-semibold text-sm mb-3">Exportar (sin duplicados de teléfono)</h3>
+                    <div class="flex flex-wrap gap-2">
+                        <button id="exportCarteraCSVBtn" class="btn-primary text-sm py-2 px-3">↓ Exportar CSV</button>
+                        <button id="exportCarteraXLSXBtn" class="btn-primary text-sm py-2 px-3">↓ Exportar XLSX</button>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-4 border border-dashed border-blue-300 rounded-lg p-4">
+                <h3 class="font-semibold text-sm mb-1">Pegar formato interno (COR-XXXX-OA / DA)</h3>
+                <p class="text-xs text-gray-400 mb-2">Copia las filas directamente desde Excel con el formato interno: <em>Ref · Op · Tipo · PrecioAgencia · PrecioOwner · PrecioMin · Dirección · Zona · Hab · Baños · ... · m²Min · m²Max · Nombre · Teléfono · Fecha · Estado · Comentarios</em></p>
+                <textarea id="carteraPasteArea" class="form-control text-xs font-mono" rows="6" placeholder="Pega aquí las filas (COR-4078-OA, COR-4080-DA…). Se importarán automáticamente con todos los campos."></textarea>
+                <div class="flex gap-2 mt-2">
+                    <button id="importCarteraPasteBtn" class="btn-primary text-sm py-2 px-3">↑ Importar Pegado</button>
+                    <button type="button" onclick="document.getElementById('carteraPasteArea').value=''" class="btn-secondary text-sm py-2 px-3">🗑 Limpiar</button>
+                </div>
+            </div>
+            <div class="mt-3">
+                <button onclick="toggleFormPanel('carteraImportPanel','toggleCarteraImportBtn')" class="btn-secondary text-sm py-1 px-3">✕ Cerrar</button>
+            </div>
+        </div>
+        </div><!-- /carteraImportPanel -->
+        <div id="carteraFormPanel" class="collapsible-form-panel">
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-6" id="carteraFormTitle">Añadir Registro a Cartera</h2>
+            <form id="carteraForm">
+                <input type="hidden" id="carteraId">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
+                    <div class="form-group">
+                        <label class="form-label" for="carteraPropertyRef">Referencia (COR-XXXX-OA)</label>
+                        <input type="text" id="carteraPropertyRef" class="form-control" placeholder="Ej: COR-4078-OA">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="carteraOwnerPhone">Teléfono (Numero)</label>
+                        <input type="tel" id="carteraOwnerPhone" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="carteraOwnerName">Nombre Propietario</label>
+                        <input type="text" id="carteraOwnerName" class="form-control" placeholder="Ej: Sofia, Xavier...">
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label class="form-label" for="carteraPropertyUrl">Enlace (URL Anuncio)</label>
+                        <input type="url" id="carteraPropertyUrl" class="form-control" placeholder="https://www.idealista.com/inmueble/...">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="carteraPropertyZone">Zona</label>
+                        <input type="text" id="carteraPropertyZone" class="form-control" placeholder="Ej: La Florida, Sants...">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="carteraPrice">Precio pedido (€)</label>
+                        <input type="text" id="carteraPrice" class="form-control" placeholder="Ej: 189000">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="carteraHonorarios">🤝 Honorarios acordados (€)</label>
+                        <input type="number" id="carteraHonorarios" class="form-control" placeholder="0" min="0" step="0.01">
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label class="form-label" for="carteraStatus">Situacion</label>
+                        <select id="carteraStatus" class="form-control" onchange="toggleCarteraClosingPanel(this.value)">
+                            <option value="no_contactado">No contactado</option>
+                            <option value="seguimiento">Seguimiento</option>
+                            <option value="disponible">Disponible</option>
+                            <option value="publicado">Publicado</option>
+                            <option value="permiten_visitas">🏠 Permiten visitas</option>
+                            <option value="no_disponible">No disponible</option>
+                            <option value="vendido_nosotros">✅ Vendido por nosotros</option>
+                            <option value="vendido_otra">🔀 Vendido por otra agencia</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="carteraFecha">Fecha</label>
+                        <input type="date" id="carteraFecha" class="form-control">
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <div class="flex items-center gap-3 p-3 rounded-lg" style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25)">
+                            <input type="checkbox" id="carteraSaleAuthorization" class="h-5 w-5" style="accent-color:#10b981;cursor:pointer">
+                            <label for="carteraSaleAuthorization" class="form-label mb-0 cursor-pointer" style="color:#10b981;font-weight:600">✅ Autorización de Venta Firmada (propietario nos autoriza a comercializar)</label>
+                        </div>
+                        <input type="hidden" id="carteraConvertedFromPsId">
+                        <div id="carteraConvertedFromPsInfo" class="hidden mt-2 text-xs py-1 px-3 rounded" style="background:rgba(59,130,246,0.1);color:#3b82f6;border:1px solid rgba(59,130,246,0.25)">🔄 Convertido desde Seguimiento Particular</div>
+                    </div>
+                </div>
+                <div class="form-group mt-4">
+                    <label class="form-label" for="carteraComments">Comentario</label>
+                    <textarea id="carteraComments" rows="3" class="form-control" placeholder="Notas, observaciones..."></textarea>
+                </div>
+
+                <!-- ===== PANEL OPERACIÓN CERRADA ===== -->
+                <div id="carteraClosingPanel" class="hidden mt-6 rounded-xl p-5" style="background:linear-gradient(135deg,rgba(16,185,129,0.08) 0%,rgba(5,150,105,0.12) 100%);border:1.5px solid rgba(16,185,129,0.4)">
+                    <div class="flex items-center gap-2 mb-4">
+                        <span style="font-size:1.4rem">🏆</span>
+                        <h3 style="font-weight:700;font-size:1rem;color:#065f46;margin:0">Ficha de Operación Cerrada</h3>
+                        <span style="margin-left:auto;background:#10b981;color:#fff;font-size:0.65rem;padding:2px 8px;border-radius:999px;font-weight:700">CERRADA</span>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                        <div class="form-group">
+                            <label class="form-label" for="carteraClosingDate">📅 Fecha de firma notarial</label>
+                            <input type="date" id="carteraClosingDate" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="carteraNotary">🏛️ Notaría</label>
+                            <input type="text" id="carteraNotary" class="form-control" placeholder="Notaría Pérez, Madrid...">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="carteraCommission">💶 Comisión cobrada (€)</label>
+                            <input type="number" id="carteraCommission" class="form-control" placeholder="0" min="0" step="0.01" oninput="updateCommissionPct()">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="carteraCommissionPct">📊 % Comisión</label>
+                            <input type="number" id="carteraCommissionPct" class="form-control" placeholder="0" min="0" max="100" step="0.01" oninput="updateCommissionAmt()">
+                        </div>
+                        <div class="form-group md:col-span-2">
+                            <label class="form-label" for="carteraBankName">🏦 Banco / Hipoteca</label>
+                            <input type="text" id="carteraBankName" class="form-control" placeholder="BBVA, Santander, sin hipoteca...">
+                        </div>
+                        <div class="form-group md:col-span-2">
+                            <label class="form-label" for="carteraClosingNotes">📝 Notas del cierre</label>
+                            <textarea id="carteraClosingNotes" rows="2" class="form-control" placeholder="Incidencias, condiciones especiales, pagares..."></textarea>
+                        </div>
+                    </div>
+                </div>
+                <!-- ===== FIN PANEL OPERACIÓN CERRADA ===== -->
+
+                <div class="mt-8 flex flex-wrap gap-3">
+                    <button type="button" id="saveCarteraBtn" class="btn-primary">Guardar en Cartera</button>
+                    <button type="button" id="newCarteraBtn" class="btn-secondary">Nuevo (Limpiar)</button>
+                    <button type="button" onclick="toggleFormPanel('carteraFormPanel','toggleCarteraFormBtn')" class="btn-secondary">✕ Cerrar</button>
+                </div>
+            </form>
+        </div>
+        </div><!-- /carteraFormPanel -->
+
+        <!-- Tabla Cartera -->
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-xl font-semibold mb-6">Listado de Cartera</h2>
+            <div class="mb-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-5 items-end">
+                <div class="form-group m-0">
+                    <label for="filterCarteraStatus" class="form-label text-sm">Filtrar por situación</label>
+                    <select id="filterCarteraStatus" class="form-control">
+                        <option value="todos">Todos</option>
+                        <option value="no_contactado">No contactado</option>
+                        <option value="seguimiento">Seguimiento</option>
+                        <option value="disponible">Disponible</option>
+                        <option value="publicado">Publicado</option>
+                        <option value="permiten_visitas">🏠 Permiten visitas</option>
+                        <option value="no_disponible">No disponible</option>
+                        <option value="vendido_nosotros">✅ Vendido por nosotros</option>
+                        <option value="vendido_otra">🔀 Vendido por otra agencia</option>
+                    </select>
+                </div>
+                <div class="form-group m-0">
+                    <label for="filterCarteraZone" class="form-label text-sm">Filtrar por zona</label>
+                    <input type="text" id="filterCarteraZone" class="form-control" placeholder="Buscar por zona">
+                </div>
+                <div class="md:col-span-3 mt-4">
+                    <button id="resetCarteraFiltersBtn" class="btn-secondary w-full md:w-auto">Resetear Filtros</button>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table id="carteraTable" class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Referencia</th>
+                            <th>Teléfono</th>
+                            <th>Nombre</th>
+                            <th>Zona</th>
+                            <th>Precio</th>
+                            <th>Situación</th>
+                            <th>Comentario</th>
+                            <th>Enlace</th>
+                            <th>Fecha</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div id="noCarteraMessage" class="py-8 text-center text-gray-500" style="display: none;">
+                No hay registros en la cartera o que coincidan con los filtros.
+            </div>
+        </div>
+    </div>
+    <!-- ===== /CARTERA TAB ===== -->
+
+    <div id="colaboradoresTab" class="tab-content">
+        <div class="flex flex-wrap gap-3 mb-4">
+        <button id="toggleCollaboratorFormBtn" class="form-toggle-btn" style="margin-bottom:0" onclick="toggleFormPanel('collaboratorFormPanel','toggleCollaboratorFormBtn')">
+            <svg class="toggle-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>Añadir Nuevo Colaborador</span>
+        </button>
+        <button id="toggleCollaboratorImportBtn" class="form-toggle-btn" style="margin-bottom:0;background:#059669" onclick="toggleFormPanel('collaboratorImportPanel','toggleCollaboratorImportBtn')">
+            <svg class="toggle-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/><polyline points="7 17 12 22 17 17"/></svg>
+            <span>Importar / Exportar</span>
+        </button>
+        </div>
+        <div id="collaboratorImportPanel" class="collapsible-form-panel">
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-4">
+            <h2 class="text-lg font-semibold mb-1">Importar / Exportar Colaboradores</h2>
+            <p class="text-sm text-gray-500 mb-4">Exporta el listado de colaboradores a CSV o XLSX.</p>
+            <div class="flex flex-wrap gap-3">
+                <button id="exportCollaboratorsCSVBtn" class="btn-primary text-sm py-2 px-3">↓ Exportar CSV</button>
+                <button id="exportCollaboratorsXLSXBtn" class="btn-primary text-sm py-2 px-3">↓ Exportar XLSX</button>
+                <button onclick="toggleFormPanel('collaboratorImportPanel','toggleCollaboratorImportBtn')" class="btn-secondary text-sm py-2 px-3">✕ Cerrar</button>
+            </div>
+        </div>
+        </div><!-- /collaboratorImportPanel -->
+        <div id="collaboratorFormPanel" class="collapsible-form-panel">
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-6" id="collaboratorFormTitle">Añadir Nuevo Colaborador</h2>
+            <form id="collaboratorForm">
+                <input type="hidden" id="collaboratorId">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
+                    <div class="form-group">
+                        <label class="form-label" for="collaboratorName">Nombre del Colaborador</label>
+                        <input type="text" id="collaboratorName" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="collaboratorAgencyName">Nombre de la Agencia</label>
+                        <input type="text" id="collaboratorAgencyName" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="collaboratorPhone">Teléfono</label>
+                        <input type="tel" id="collaboratorPhone" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="collaboratorEmail">Correo Electrónico</label>
+                        <input type="email" id="collaboratorEmail" class="form-control">
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label class="form-label" for="collaboratorAddress">Dirección</label>
+                        <input type="text" id="collaboratorAddress" class="form-control">
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label class="form-label" for="collaboratorURL">URL (Página Web, Perfil, etc.)</label>
+                        <input type="url" id="collaboratorURL" class="form-control" placeholder="https://...">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="collaboratorFecha">Fecha de Alta</label>
+                        <input type="date" id="collaboratorFecha" class="form-control">
+                    </div>
+                </div>
+                <div class="form-group mt-6 col-span-1 md:col-span-2">
+                    <label class="form-label" for="collaboratorComments">Comentarios Adicionales</label>
+                    <textarea id="collaboratorComments" rows="4" class="form-control"></textarea>
+                </div>
+                <div class="mt-8 flex flex-wrap gap-3">
+                    <button type="button" id="saveCollaboratorBtn" class="btn-primary">Guardar Colaborador</button>
+                    <button type="button" id="newCollaboratorBtn" class="btn-secondary">Nuevo Colaborador (Limpiar)</button>
+                    <button type="button" onclick="toggleFormPanel('collaboratorFormPanel','toggleCollaboratorFormBtn')" class="btn-secondary">✕ Cerrar</button>
+                </div>
+            </form>
+        </div>
+        </div><!-- /collaboratorFormPanel -->
+
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-xl font-semibold mb-6">Listado de Colaboradores</h2>
+            <div class="overflow-x-auto">
+                <table id="collaboratorsTable" class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Nombre Colaborador</th>
+                            <th>Agencia</th>
+                            <th>Teléfono</th>
+                            <th>Email</th>
+                            <th>Dirección</th>
+                            <th>URL</th>
+                            <th>Fecha</th>
+                            <th>Documento</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div id="noCollaboratorsMessage" class="py-8 text-center text-gray-500" style="display: none;">
+                No hay colaboradores en la base de datos.
+            </div>
+        </div>
+    </div>
+
+    <div id="cruceTab" class="tab-content">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-xl font-semibold mb-6">Cruce de Clientes Compradores con Propiedades (Captadas/Colab.)</h2>
+            <button id="performCruceBtn" class="btn-primary mb-8">Realizar Cruce Ahora</button>
+            <div id="cruceResults" class="space-y-8">
+                <p class="text-gray-500">Pulse "Realizar Cruce Ahora" para ver los resultados.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="cruceCarteraTab" class="tab-content">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+            <h2 class="text-xl font-semibold mb-2">Cruce de Clientes Compradores con Cartera</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">Cruza compradores activos contra los pisos de tu cartera (vendedores particulares captados).</p>
+            <div class="flex items-center gap-3 mb-8">
+                <button id="performCruceCarteraBtn" class="btn-primary">Realizar Cruce Ahora</button>
+                <span class="text-xs text-gray-400" id="cruceCarteraCount"></span>
+            </div>
+            <div id="cruceCarteraResults" class="space-y-8">
+                <p class="text-gray-500">Pulse "Realizar Cruce Ahora" para ver los resultados.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="databaseTab" class="tab-content">
+         <div class="bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-xl font-semibold mb-6">Listado de Clientes Compradores</h2>
+            <div class="mb-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-5 items-end">
+                <div class="form-group m-0">
+                    <label for="filterStatus" class="form-label text-sm">Filtrar por estado</label>
+                    <select id="filterStatus" class="form-control">
+                        <option value="todos">Todos</option>
+                        <option value="activo">Activo</option>
+                        <option value="no_activo">No Activo</option>
+                        <option value="seguimiento">Seguimiento</option>
+                        <option value="descartado">Descartado</option>
+                    </select>
+                </div>
+                <div class="form-group m-0">
+                    <label for="filterZone" class="form-label text-sm">Filtrar por zona</label>
+                    <input type="text" id="filterZone" class="form-control" placeholder="Buscar por zona">
+                </div>
+                 <div class="form-group m-0">
+                    <label for="filterNumRooms" class="form-label text-sm">Nº Habitaciones (Cliente)</label>
+                    <select id="filterNumRooms" class="form-control">
+                        <option value="todos">Todas</option>
+                        <option value="0">0 (Estudio)</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5+</option>
+                    </select>
+                </div>
+                <div class="form-group m-0">
+                    <label for="filterPriceMin" class="form-label text-sm">Precio Máx. Cliente (€) Desde</label>
+                    <input type="number" id="filterPriceMin" class="form-control" placeholder="Mínimo">
+                </div>
+                <div class="form-group m-0">
+                    <label for="filterPriceMax" class="form-label text-sm">Precio Máx. Cliente (€) Hasta</label>
+                    <input type="number" id="filterPriceMax" class="form-control" placeholder="Máximo">
+                </div>
+                <div class="form-group m-0">
+                    <label for="filterElevator" class="form-label text-sm">Ascensor (Preferencia Cliente)</label>
+                    <select id="filterElevator" class="form-control">
+                        <option value="todos">Todos</option>
+                        <option value="si">Sí (Indispensable)</option>
+                        <option value="no">No indispensable (General)</option>
+                        <option value="no_indispensable_1">No indispensable hasta un 1º</option>
+                        <option value="no_indispensable_2">No indispensable hasta un 2º</option>
+                        <option value="no_indispensable_3">No indispensable hasta un 3º</option>
+                        <option value="no_indispensable_4">No indispensable hasta un 4º</option>
+                        <option value="indiferente">Indiferente</option>
+                    </select>
+                </div>
+                <div class="md:col-span-3 mt-4">
+                    <button id="resetFiltersBtn" class="btn-secondary w-full md:w-auto">Resetear Filtros</button>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table id="clientsTable" class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Teléfono</th>
+                            <th>Email</th>
+                            <th>Precio Máx.</th>
+                            <th>Aportación</th>
+                            <th>Zona</th>
+                            <th>Hipoteca</th>
+                            <th>Estado</th>
+                            <th>Hab. Des.</th>
+                            <th>Ascensor Pref.</th>
+                            <th>m² Min</th>
+                            <th>m² Max</th>
+                            <th>Fecha</th>
+                            <th>Documento</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div id="noDataMessage" class="py-8 text-center text-gray-500" style="display: none;">
+                No hay clientes en la base de datos que coincidan con los filtros.
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== DASHBOARD TAB ===== -->
+    <div id="dashboardTab" class="tab-content">
+        <div class="flex items-center justify-between mb-6">
+            <h1 class="text-2xl font-bold text-gray-800 dark:text-white">Dashboard</h1>
+            <div class="flex items-center gap-2">
+                <button id="dashWeeklySummaryBtn" onclick="generateWeeklySummary()" class="hidden btn-secondary text-sm py-2 px-4 flex items-center gap-2">
+                    📋 Resumen semanal
+                </button>
+                <button onclick="renderDashboard()" class="btn-secondary text-sm py-2 px-4 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                    Actualizar
+                </button>
+            </div>
+        </div>
+
+        <!-- BLOQUE 4: Agenda del día -->
+        <div class="mb-6">
+            <h2 class="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-3 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                Agenda del día
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-4 border-l-4 border-red-500">
+                    <div class="text-3xl font-bold text-red-500" id="dash-overdue-count">—</div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Seguimientos vencidos (hoy o antes)</div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-4 border-l-4 border-orange-400">
+                    <div class="text-3xl font-bold text-orange-400" id="dash-thisweek-count">—</div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Pendientes esta semana</div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-4 border-l-4 border-green-500">
+                    <div class="text-3xl font-bold text-green-500" id="dash-done-today-count">—</div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Contactados hoy</div>
+                </div>
+            </div>
+            <div id="dash-agenda-list" class="bg-white dark:bg-gray-800 rounded-xl shadow divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
+                <div class="p-4 text-sm text-gray-400">Cargando agenda...</div>
+            </div>
+        </div>
+
+        <!-- BLOQUE 5: Matches sin gestionar -->
+        <div class="mb-6">
+            <h2 class="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-3 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                Matches comprador ↔ propiedad
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-4 border-l-4 border-purple-500">
+                    <div class="text-3xl font-bold text-purple-500" id="dash-matches-total">—</div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Matches encontrados</div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-4 border-l-4 border-blue-500">
+                    <div class="text-3xl font-bold text-blue-500" id="dash-top-property-name">—</div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Propiedad con más compradores compatibles</div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-4 border-l-4 border-indigo-500">
+                    <div class="text-3xl font-bold text-indigo-500" id="dash-top-client-name">—</div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Comprador con más propiedades compatibles</div>
+                </div>
+            </div>
+            <div id="dash-matches-list" class="bg-white dark:bg-gray-800 rounded-xl shadow divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
+                <div class="p-4 text-sm text-gray-400">Cargando matches...</div>
+            </div>
+        </div>
+
+        <!-- BLOQUE 6: Feed de actividad reciente -->
+        <div class="mb-6">
+            <h2 class="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-3 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Actividad reciente
+            </h2>
+            <div id="dash-activity-feed" class="bg-white dark:bg-gray-800 rounded-xl shadow divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
+                <div class="p-4 text-sm text-gray-400">Cargando actividad...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== ANALYTICS TAB ===== -->
+    <div id="analyticsTab" class="tab-content">
+        <div class="flex items-center justify-between mb-6">
+            <h1 class="text-2xl font-bold text-gray-800 dark:text-white">Analytics</h1>
+            <button onclick="renderAnalytics()" class="btn-secondary text-sm py-2 px-4 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                Actualizar
+            </button>
+        </div>
+
+        <!-- BLOQUE 1: Alertas inteligentes -->
+        <div class="mb-6">
+            <h2 class="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-3 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                Alertas inteligentes
+            </h2>
+            <div id="analytics-alerts" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-4 text-sm text-gray-400">Cargando alertas...</div>
+            </div>
+        </div>
+
+        <!-- BLOQUE 2: KPIs del mes -->
+        <div class="mb-6">
+            <h2 class="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-3 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+                KPIs del mes
+            </h2>
+            <div id="analytics-kpis" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-4 text-sm text-gray-400">Cargando KPIs...</div>
+            </div>
+        </div>
+
+        <!-- BLOQUE 3: Mapa de calor de zonas -->
+        <div class="mb-6">
+            <h2 class="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-3 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 0 1 8 8c0 5.25-8 14-8 14S4 15.25 4 10a8 8 0 0 1 8-8z"/></svg>
+                Demanda vs oferta por zona
+            </h2>
+            <div id="analytics-zones" class="bg-white dark:bg-gray-800 rounded-xl shadow overflow-hidden">
+                <div class="p-4 text-sm text-gray-400">Cargando zonas...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== MÉTRICAS DE USUARIO TAB ===== -->
+    <div id="metricasTab" class="tab-content">
+        <div class="mb-6">
+            <h1 class="text-2xl font-bold" style="color:inherit">📊 Métricas de Usuario</h1>
+            <p class="text-sm mt-1" style="color:#94a3b8">Resumen de actividad y rendimiento de la cuenta activa.</p>
+        </div>
+        <!-- KPIs propios del usuario actual -->
+        <div id="metricasUserContainer" class="mb-8">
+            <div class="text-center py-6" style="color:#94a3b8">Cargando métricas...</div>
+        </div>
+        <!-- Revenue / facturación -->
+        <div id="revenueMetricsContainer" class="mb-8 rounded-xl p-5" style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2)">
+            <div class="text-center py-4" style="color:#94a3b8">Cargando facturación...</div>
+        </div>
+        <!-- Estadísticas de cartera -->
+        <div id="carteraStatsContainer" class="mb-8 rounded-xl p-5" style="background:rgba(59,130,246,0.04);border:1px solid rgba(59,130,246,0.18)">
+            <div class="text-center py-4" style="color:#94a3b8">Cargando estadísticas de cartera...</div>
+        </div>
+        <!-- Pipeline de captación -->
+        <div id="pipelineStatsContainer" class="mb-8 rounded-xl p-5" style="background:rgba(245,158,11,0.05);border:1px solid rgba(245,158,11,0.22)">
+            <div class="text-center py-4" style="color:#94a3b8">Cargando pipeline...</div>
+        </div>
+        <!-- Tabla admin (solo visible para el responsable) -->
+        <div id="metricasAdminSection" class="hidden">
+            <div class="flex items-center gap-2 mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                <h2 class="text-lg font-bold" style="color:#7c3aed">Vista Supervisión — Comparativa del Equipo</h2>
+            </div>
+            <div id="metricasTeamContainer">
+                <div class="text-center py-4" style="color:#94a3b8">Cargando datos del equipo...</div>
+            </div>
+        </div>
+    </div>
+    <!-- ===== /MÉTRICAS TAB ===== -->
+
+    <!-- ===== PANEL ADMIN / SUPERVISIÓN TAB ===== -->
+    <div id="adminPanelTab" class="tab-content">
+        <div class="mb-6">
+            <h1 class="text-2xl font-bold" style="color:#7c3aed">🛡️ Panel de Supervisión</h1>
+            <p class="text-sm mt-1" style="color:#94a3b8">Gestión del equipo y acceso supervisado a las cuentas de los comerciales.</p>
+        </div>
+
+        <!-- Añadir / gestionar comerciales -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">👥 Miembros del Equipo</h2>
+            <p class="text-sm mb-4" style="color:#6b7280">Registra los emails de tus comerciales para poder supervisarlos. Sus métricas se sincronizarán aquí automáticamente cuando trabajen.</p>
+            <div class="flex gap-3 mb-4">
+                <input type="email" id="newTeamMemberEmail" placeholder="email@comercial.com" class="form-control flex-1">
+                <input type="text" id="newTeamMemberName" placeholder="Nombre del comercial" class="form-control flex-1">
+                <button onclick="addTeamMember()" class="btn-primary whitespace-nowrap">+ Añadir</button>
+            </div>
+            <div id="teamMembersList"></div>
+        </div>
+
+        <!-- Vista supervisión / métricas del equipo -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold">📈 Métricas del Equipo en Tiempo Real</h2>
+                <button onclick="loadAndRenderAdminPanel()" class="btn-secondary text-sm">🔄 Actualizar</button>
+            </div>
+            <div id="adminTeamMetrics">
+                <div class="text-center py-4" style="color:#94a3b8">Pulsa Actualizar para cargar los datos del equipo.</div>
+            </div>
+        </div>
+
+        <!-- Acceso a cuenta de comercial -->
+        <div class="bg-white rounded-xl shadow-lg p-6">
+            <h2 class="text-lg font-semibold mb-2">🔐 Acceso Supervisado a una Cuenta</h2>
+            <p class="text-sm mb-4" style="color:#6b7280">Puedes entrar en la cuenta de un comercial para revisar su trabajo. Se te pedirá la contraseña de ese usuario. Ellos no pueden entrar en tu cuenta.</p>
+            <div class="flex gap-3 flex-wrap">
+                <input type="email" id="impersonateEmail" placeholder="Email del comercial" class="form-control" style="max-width:280px">
+                <input type="password" id="impersonatePassword" placeholder="Contraseña del comercial" class="form-control" style="max-width:220px">
+                <button onclick="enterCommercialSession()" class="btn-primary" style="background:#7c3aed">🔍 Entrar como comercial</button>
+            </div>
+            <p class="text-xs mt-2" style="color:#9ca3af">Al finalizar la revisión, usa el banner morado de la barra superior para volver a tu cuenta.</p>
+        </div>
+    </div>
+    <!-- ===== /PANEL ADMIN TAB ===== -->
+
+    <div id="configuracionTab" class="tab-content">
+        <div class="space-y-6">
+
+            <!-- 1. Agente Inmobiliario -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+                <div class="flex items-center gap-3 mb-1">
+                    <span class="text-2xl">&#x1F464;</span>
+                    <div>
+                        <h2 class="text-xl font-semibold">Agente Inmobiliario</h2>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">Datos que aparecen en plantillas WhatsApp, PDFs y notificaciones.</p>
+                    </div>
+                </div>
+                <div class="mt-5 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                    <div class="form-group">
+                        <label class="form-label">Nombre del agente</label>
+                        <input type="text" id="cfg-agent-name" class="form-control" placeholder="Ej: Daniel Hern&#xe1;ndez">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Cargo / T&#xed;tulo</label>
+                        <input type="text" id="cfg-agent-title" class="form-control" placeholder="Ej: Agente Inmobiliario">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Tel&#xe9;fono del agente</label>
+                        <input type="tel" id="cfg-agent-phone" class="form-control" placeholder="Ej: 620809938">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input type="email" id="cfg-agent-email" class="form-control" placeholder="Ej: agente@inmobase.com">
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label class="form-label">Nombre de la empresa / Inmobiliaria</label>
+                        <input type="text" id="cfg-company-name" class="form-control" placeholder="Ej: INMOBASE">
+                    </div>
+                </div>
+                <div class="mt-6 flex items-center gap-3">
+                    <button onclick="saveAgentSettings()" class="btn-primary">&#x1F4BE; Guardar cambios</button>
+                    <span id="cfg-agent-saved-msg" class="text-sm text-green-500 hidden">&#x2714; Datos guardados</span>
+                </div>
+            </div>
+
+            <!-- 2. Plantillas WhatsApp -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+                <div class="flex items-center gap-3 mb-1">
+                    <span class="text-2xl">&#x1F4AC;</span>
+                    <div>
+                        <h2 class="text-xl font-semibold">Plantillas WhatsApp</h2>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">Personaliza el texto de cada plantilla. Los cambios se guardan en el navegador.</p>
+                    </div>
+                </div>
+                <div class="mt-4 text-xs text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3 mb-4">
+                    <strong>Variables disponibles:</strong>
+                    <code class="mx-1 px-1 bg-blue-100 dark:bg-blue-800 rounded">{{nombre}}</code>
+                    <code class="mx-1 px-1 bg-blue-100 dark:bg-blue-800 rounded">{{agente}}</code>
+                    <code class="mx-1 px-1 bg-blue-100 dark:bg-blue-800 rounded">{{empresa}}</code>
+                    <code class="mx-1 px-1 bg-blue-100 dark:bg-blue-800 rounded">{{zona}}</code>
+                    <code class="mx-1 px-1 bg-blue-100 dark:bg-blue-800 rounded">{{precio_max}}</code>
+                    <code class="mx-1 px-1 bg-blue-100 dark:bg-blue-800 rounded">{{dir_prop}}</code>
+                    <code class="mx-1 px-1 bg-blue-100 dark:bg-blue-800 rounded">{{precio_prop}}</code>
+                    <code class="mx-1 px-1 bg-blue-100 dark:bg-blue-800 rounded">{{hab_prop}}</code>
+                    <code class="mx-1 px-1 bg-blue-100 dark:bg-blue-800 rounded">{{m2_prop}}</code>
+                </div>
+                <div id="waTemplateEditor" class="space-y-2"></div>
+            </div>
+
+            <!-- 3. Alertas y Notificaciones -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+                <div class="flex items-center gap-3 mb-1">
+                    <span class="text-2xl">&#x1F514;</span>
+                    <div>
+                        <h2 class="text-xl font-semibold">Alertas y Notificaciones</h2>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">Controla cu&#xe1;ndo y con qu&#xe9; frecuencia el sistema te avisa de acciones pendientes.</p>
+                    </div>
+                </div>
+
+                <!-- Toggle activar/desactivar -->
+                <div class="mt-5 flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-700/30">
+                    <div>
+                        <div class="font-semibold text-sm">Notificaciones del navegador</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Recibe avisos aunque no tengas la pesta&#xf1;a activa</div>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="cfg-alerts-enabled" class="sr-only peer" checked>
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                </div>
+
+                <!-- Frecuencia e intensidad -->
+                <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label">&#x23F0; Frecuencia de comprobaci&#xf3;n</label>
+                        <select id="cfg-alerts-interval" class="form-control">
+                            <option value="0.5">Cada 30 minutos</option>
+                            <option value="1" selected>Cada 1 hora</option>
+                            <option value="2">Cada 2 horas</option>
+                            <option value="4">Cada 4 horas</option>
+                            <option value="8">Cada 8 horas</option>
+                            <option value="12">Cada 12 horas</option>
+                            <option value="24">Una vez al d&#xed;a</option>
+                        </select>
+                        <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">Solo funciona mientras la app est&#xe9; abierta</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">&#x26A1; Nivel de urgencia m&#xed;nimo</label>
+                        <select id="cfg-alerts-urgency" class="form-control">
+                            <option value="any">Todos los avisos</option>
+                            <option value="overdue">Solo seguimientos vencidos</option>
+                        </select>
+                        <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">Filtra qu&#xe9; tan saturante quieres que sea</p>
+                    </div>
+                </div>
+
+                <!-- Tipos de alerta -->
+                <div class="mt-4 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                    <div class="font-semibold text-sm mb-3">Tipos de alerta activos</div>
+                    <div class="space-y-3">
+                        <label class="flex items-start gap-3 cursor-pointer">
+                            <input type="checkbox" id="cfg-alert-seguimientos" class="mt-0.5 rounded text-blue-600 w-4 h-4" checked>
+                            <div>
+                                <span class="text-sm font-medium">&#x1F4CB; Seguimientos vencidos</span>
+                                <span class="text-xs text-gray-400 block">Particulares con fecha de pr&#xf3;ximo contacto caducada</span>
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-3 cursor-pointer">
+                            <input type="checkbox" id="cfg-alert-ps-inactive" class="mt-0.5 rounded text-blue-600 w-4 h-4" checked>
+                            <div>
+                                <span class="text-sm font-medium">&#x1F534; Particulares sin contacto (+7 d&#xed;as)</span>
+                                <span class="text-xs text-gray-400 block">Propietarios que llevan m&#xe1;s de 7 d&#xed;as sin actividad registrada</span>
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-3 cursor-pointer">
+                            <input type="checkbox" id="cfg-alert-clients-inactive" class="mt-0.5 rounded text-blue-600 w-4 h-4">
+                            <div>
+                                <span class="text-sm font-medium">&#x1F7E1; Compradores sin actividad (+30 d&#xed;as)</span>
+                                <span class="text-xs text-gray-400 block">Compradores activos o en seguimiento sin registro reciente</span>
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-3 cursor-pointer">
+                            <input type="checkbox" id="cfg-alert-ps-no-cita" class="mt-0.5 rounded text-blue-600 w-4 h-4">
+                            <div>
+                                <span class="text-sm font-medium">&#x1F7E0; Particulares sin pr&#xf3;xima cita agendada</span>
+                                <span class="text-xs text-gray-400 block">Propietarios activos sin fecha de seguimiento programada</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="mt-5 flex flex-wrap items-center gap-3">
+                    <button onclick="saveAlertConfig()" class="btn-primary">&#x1F4BE; Guardar configuraci&#xf3;n</button>
+                    <button onclick="testBrowserNotification()" class="btn-secondary">&#x1F514; Probar notificaci&#xf3;n</button>
+                    <span id="cfg-alerts-saved-msg" class="text-sm text-green-500 hidden">&#x2714; Configuraci&#xf3;n guardada</span>
+                </div>
+            </div>
+
+            <!-- 4. Importaci&#xf3;n / Exportaci&#xf3;n -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+                <div class="flex items-center gap-3 mb-1">
+                    <span class="text-2xl">&#x1F4E6;</span>
+                    <div>
+                        <h2 class="text-xl font-semibold">Importaci&#xf3;n / Exportaci&#xf3;n</h2>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">Exporta todos tus datos para hacer copia de seguridad o importa una copia anterior.</p>
+                    </div>
+                </div>
+                <div class="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="p-5 border border-gray-200 dark:border-gray-700 rounded-lg">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-lg">&#x1F4CB;</span>
+                            <h3 class="font-semibold text-sm">Formato JSON</h3>
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Todos los datos en un &#xfa;nico archivo portable. Ideal para copias de seguridad completas.</p>
+                        <div class="flex flex-wrap gap-2">
+                            <button id="exportJsonBtn" class="btn-primary text-sm">&#x2193; Exportar JSON</button>
+                            <button id="importJsonTriggerBtn" class="btn-secondary text-sm">&#x2191; Importar JSON</button>
+                            <input type="file" id="importJsonInput" class="hidden" accept=".json">
+                        </div>
+                    </div>
+                    <div class="p-5 border border-gray-200 dark:border-gray-700 rounded-lg">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-lg">&#x1F4CA;</span>
+                            <h3 class="font-semibold text-sm">Formato Excel (XLSX)</h3>
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Clientes, propiedades, colaboradores y particulares en hojas separadas.</p>
+                        <div class="flex flex-wrap gap-2">
+                            <button id="exportXlsxBtn" class="btn-primary text-sm">&#x2193; Exportar XLSX</button>
+                            <button id="importXlsxTriggerBtn" class="btn-secondary text-sm">&#x2191; Importar XLSX</button>
+                            <input type="file" id="importXlsxInput" class="hidden" accept=".xlsx, .xls">
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-4 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-3">
+                    &#x26A0;&#xFE0F; <strong>Importar datos sobreescribe todo</strong> el contenido actual. Aseg&#xfa;rate de exportar una copia antes de importar.
+                </div>
+            </div>
+
+        </div>
+    </div>
+</main>
+
+<div id="clientDetailsModal" class="modal">
+    <div class="modal-content">
+        <span class="close-modal-btn" onclick="closeModal('clientDetailsModal')">×</span>
+        <h2 class="text-xl font-bold mb-6">Detalles de <span id="modalClientName">Cliente</span></h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+            <div><strong class="text-gray-600">Teléfono:</strong> <span id="modalClientPhone">-</span></div>
+            <div><strong class="text-gray-600">Email:</strong> <span id="modalClientEmail">-</span></div>
+            <div><strong class="text-gray-600">Precio Máx.:</strong> <span id="modalClientPriceMax">-</span></div>
+            <div><strong class="text-gray-600">Aportación:</strong> <span id="modalClientContribution">-</span></div>
+            <div class="md:col-span-2"><strong class="text-gray-600">Zona(s):</strong> <span id="modalClientZone">-</span></div>
+            <div><strong class="text-gray-600">Hipoteca Aprobada:</strong> <span id="modalMortgageApproved">-</span></div>
+            <div><strong class="text-gray-600">Estado:</strong> <span id="modalClientStatus">-</span></div>
+            <div><strong class="text-gray-600">Nº Habitaciones Des.:</strong> <span id="modalClientNumRooms">-</span></div>
+            <div><strong class="text-gray-600">Ascensor Pref.:</strong> <span id="modalClientElevator">-</span></div>
+            <div><strong class="text-gray-600">Metros Mínimos:</strong> <span id="modalClientMinSqMeters">-</span><span id="modalClientMinSqMetersUnit"></span></div>
+            <div><strong class="text-gray-600">Metros Máximos:</strong> <span id="modalClientMaxSqMeters">-</span><span id="modalClientMaxSqMetersUnit"></span></div>
+        </div>
+        <div class="mt-6">
+            <h3 class="text-lg font-semibold mb-2">Comentarios (Cliente)</h3>
+            <div id="modalClientComments" class="p-3 bg-gray-50 rounded-md text-gray-700 min-h-[80px] whitespace-pre-wrap">-</div>
+        </div>
+        <div id="modalClientPdfSection" class="mt-4 hidden">
+            <button id="modalClientViewPdfBtn" class="btn-secondary text-sm" data-client-id="">Ver PDF Adjunto (Cliente)</button>
+        </div>
+        <div class="mt-8 flex flex-col sm:flex-row justify-between items-center space-y-3 sm:space-y-0">
+            <button id="exportClientPDFBtn" class="btn-primary w-full sm:w-auto" data-client-id="">Exportar Ficha a PDF</button>
+            <div class="flex space-x-3">
+                <button id="editClientModalBtn" class="btn-secondary" data-client-id="">Editar</button>
+                <button id="deleteClientModalBtn" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md font-medium" data-client-id="">Eliminar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="propertyDetailsModal" class="modal">
+    <div class="modal-content">
+        <span class="close-modal-btn" onclick="closeModal('propertyDetailsModal')">×</span>
+        <h2 class="text-xl font-bold mb-4">Detalles de Propiedad: <span id="modalPropertyAddress"></span></h2>
+        <img id="modalPropertyImage" src="#" alt="Imagen de la propiedad" class="modal-property-image hidden mb-6"/>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+            <div><strong class="text-gray-600">Precio:</strong> <span id="modalPropertyPrice">-</span></div>
+            <div><strong class="text-gray-600">Vendedor/Agencia:</strong> <span id="modalSellerName">-</span></div>
+            <div><strong class="text-gray-600">Teléfono Vendedor:</strong> <span id="modalSellerPhone">-</span></div>
+            <div><strong class="text-gray-600">Origen:</strong> <span id="modalSellerType">-</span></div>
+            <div><strong class="text-gray-600">Planta:</strong> <span id="modalPropertyFloor">-</span></div>
+            <div><strong class="text-gray-600">Metros Cuadrados:</strong> <span id="modalPropertySqMeters">-</span> m²</div>
+            <div><strong class="text-gray-600">Habitaciones:</strong> <span id="modalPropertyRooms">-</span></div>
+            <div><strong class="text-gray-600">Baños:</strong> <span id="modalPropertyBaths">-</span></div>
+            <div><strong class="text-gray-600">Ascensor:</strong> <span id="modalPropertyElevator">-</span></div>
+            <div class="md:col-span-2"><strong class="text-gray-600">URL Anuncio:</strong> <span id="modalPropertyURL" class="break-all">-</span></div>
+        </div>
+         <div class="mt-6">
+            <h3 class="text-lg font-semibold mb-2">Comentarios (Propiedad)</h3>
+            <div id="modalPropertyComments" class="p-3 bg-gray-50 rounded-md text-gray-700 min-h-[80px] whitespace-pre-wrap">-</div>
+        </div>
+        <div class="mt-8 flex flex-col sm:flex-row justify-between items-center space-y-3 sm:space-y-0">
+            <div class="flex flex-wrap gap-3">
+                <button id="exportPropertyPDFBtn" class="btn-primary" data-property-id="">Exportar Ficha</button>
+                <button id="viewPropertyOnlineBtn" class="btn-link" data-property-id="" disabled>
+                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M12.586 2.586a2 2 0 00-2.828 0L8.343 3.999a2 2 0 102.828 2.829L12.586 5.414a2 2 0 000-2.828zM7.414 12.586a2 2 0 002.828 0L11.657 11.17a2 2 0 10-2.828-2.828L7.414 9.757a2 2 0 000 2.829zm2.172-6.757a3.5 3.5 0 010 4.95l-2.5 2.5a3.5 3.5 0 11-4.95-4.95l2.5-2.5a3.5 3.5 0 014.95 0zm6.757 2.172a3.5 3.5 0 010 4.95l-2.5 2.5a3.5 3.5 0 01-4.95-4.95l.707-.707a1.5 1.5 0 012.121 2.121l-.707.707a1.5 1.5 0 002.121 2.121l2.5-2.5a1.5 1.5 0 00-2.121-2.121l-.707.707a3.501 3.501 0 01-3.535-1.414A3.485 3.485 0 015.828 7.5H5a1 1 0 110-2h.828a3.5 3.5 0 014.95 0z" clip-rule="evenodd" />
+                    </svg>
+                    Ver Anuncio
+                </button>
+            </div>
+            <div class="flex space-x-3">
+                <button id="editPropertyModalBtn" class="btn-secondary" data-property-id="">Editar</button>
+                <button id="deletePropertyModalBtn" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md font-medium" data-property-id="">Eliminar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="collaboratorDetailsModal" class="modal">
+    <div class="modal-content">
+        <span class="close-modal-btn" onclick="closeModal('collaboratorDetailsModal')">×</span>
+        <h2 class="text-xl font-bold mb-6">Detalles de <span id="modalCollaboratorName">Colaborador</span></h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+            <div><strong class="text-gray-600">Nombre Agencia:</strong> <span id="modalCollaboratorAgencyName">-</span></div>
+            <div><strong class="text-gray-600">Teléfono:</strong> <span id="modalCollaboratorPhone">-</span></div>
+            <div><strong class="text-gray-600">Email:</strong> <span id="modalCollaboratorEmail">-</span></div>
+            <div class="md:col-span-2"><strong class="text-gray-600">Dirección:</strong> <span id="modalCollaboratorAddress">-</span></div>
+            <div class="md:col-span-2"><strong class="text-gray-600">URL:</strong> <span id="modalCollaboratorURL" class="break-all">-</span></div>
+        </div>
+        <div class="mt-6">
+            <h3 class="text-lg font-semibold mb-2">Comentarios</h3>
+            <div id="modalCollaboratorComments" class="p-3 bg-gray-50 rounded-md text-gray-700 min-h-[80px] whitespace-pre-wrap">-</div>
+        </div>
+        <div id="modalCollaboratorPdfSection" class="mt-4 hidden">
+            <button id="modalCollaboratorViewPdfBtn" class="btn-secondary text-sm" data-collaborator-id="">Ver PDF Adjunto (Colaborador)</button>
+        </div>
+        <div class="mt-8 flex flex-col sm:flex-row justify-between items-center space-y-3 sm:space-y-0">
+            <button id="exportCollaboratorPDFBtn" class="btn-primary w-full sm:w-auto" data-collaborator-id="">Exportar Ficha a PDF</button>
+            <div class="flex space-x-3">
+                <button id="editCollaboratorModalBtn" class="btn-secondary" data-collaborator-id="">Editar</button>
+                <button id="deleteCollaboratorModalBtn" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md font-medium" data-collaborator-id="">Eliminar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="privateSellerDetailsModal" class="modal">
+    <div class="modal-content">
+        <span class="close-modal-btn" onclick="closeModal('privateSellerDetailsModal')">×</span>
+        <h2 class="text-xl font-bold mb-4">Detalles Vendedor Particular: <span id="modalPrivateSellerOwnerName"></span></h2>
+        <img id="modalPrivateSellerPropertyImage" src="#" alt="Imagen del inmueble" class="modal-property-image hidden mb-6"/>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+            <div><strong class="text-gray-600">Teléfono:</strong> <span id="modalPrivateSellerOwnerPhone">-</span></div>
+            <div><strong class="text-gray-600">Email:</strong> <span id="modalPrivateSellerOwnerEmail">-</span></div>
+            <div class="md:col-span-2"><strong class="text-gray-600">Dirección Inmueble:</strong> <span id="modalPrivateSellerPropertyAddress">-</span></div>
+            <div><strong class="text-gray-600">Zona Inmueble:</strong> <span id="modalPrivateSellerPropertyZone">-</span></div>
+            <div><strong class="text-gray-600">Planta:</strong> <span id="modalPrivateSellerPropertyFloor">-</span></div>
+            <div><strong class="text-gray-600">Habitaciones:</strong> <span id="modalPrivateSellerPropertyRooms">-</span></div>
+            <div><strong class="text-gray-600">Metros Cuadrados:</strong> <span id="modalPrivateSellerPropertySqMeters">-</span> m²</div>
+            <div><strong class="text-gray-600">Ascensor:</strong> <span id="modalPrivateSellerPropertyElevator">-</span></div>
+            <div><strong class="text-gray-600">Estado Seguimiento:</strong> <span id="modalPrivateSellerStatus">-</span></div>
+            <div><strong class="text-gray-600">📅 Último contacto:</strong> <span id="modalPrivateSellerLastContact">-</span></div>
+            <div><strong class="text-gray-600">🔔 Próximo seguimiento:</strong> <span id="modalPrivateSellerNextContact">-</span></div>
+            <div class="md:col-span-2"><strong class="text-gray-600">URL Anuncio:</strong> <span id="modalPrivateSellerPropertyURL" class="break-all">-</span></div>
+        </div>
+         <div class="mt-6">
+            <h3 class="text-lg font-semibold mb-2">Comentarios (Seguimiento)</h3>
+            <div id="modalPrivateSellerComments" class="p-3 bg-gray-50 rounded-md text-gray-700 min-h-[80px] whitespace-pre-wrap">-</div>
+        </div>
+        <div class="mt-8 flex flex-col sm:flex-row justify-between items-center space-y-3 sm:space-y-0">
+             <div class="flex flex-wrap gap-3">
+                <button id="exportPrivateSellerPDFBtn" class="btn-primary" data-privateseller-id="">Exportar Ficha</button>
+                 <button id="viewPrivateSellerPropertyOnlineBtn" class="btn-link" data-privateseller-id="" disabled>
+                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M12.586 2.586a2 2 0 00-2.828 0L8.343 3.999a2 2 0 102.828 2.829L12.586 5.414a2 2 0 000-2.828zM7.414 12.586a2 2 0 002.828 0L11.657 11.17a2 2 0 10-2.828-2.828L7.414 9.757a2 2 0 000 2.829zm2.172-6.757a3.5 3.5 0 010 4.95l-2.5 2.5a3.5 3.5 0 11-4.95-4.95l2.5-2.5a3.5 3.5 0 014.95 0zm6.757 2.172a3.5 3.5 0 010 4.95l-2.5 2.5a3.5 3.5 0 01-4.95-4.95l.707-.707a1.5 1.5 0 012.121 2.121l-.707.707a1.5 1.5 0 002.121 2.121l2.5-2.5a1.5 1.5 0 00-2.121-2.121l-.707.707a3.501 3.501 0 01-3.535-1.414A3.485 3.485 0 015.828 7.5H5a1 1 0 110-2h.828a3.5 3.5 0 014.95 0z" clip-rule="evenodd" />
+                    </svg>
+                    Ver Anuncio
+                </button>
+                <button id="scheduleGCalPrivateSellerBtn" class="btn-secondary" data-privateseller-id="">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd" />
+                    </svg>
+                    Agendar GCal
+                </button>
+            </div>
+            <div class="flex space-x-3">
+                <button id="editPrivateSellerModalBtn" class="btn-secondary" data-privateseller-id="">Editar</button>
+                <button id="deletePrivateSellerModalBtn" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md font-medium" data-privateseller-id="">Eliminar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- Modal Cartera -->
+<div id="carteraDetailsModal" class="modal">
+    <div class="modal-content">
+        <span class="close-modal-btn" onclick="closeModal('carteraDetailsModal')">×</span>
+        <h2 class="text-xl font-bold mb-4">Detalle Cartera: <span id="modalCarteraOwnerName"></span></h2>
+        <div id="modalCarteraSaleAuthBadge" class="hidden mb-4 flex items-center gap-2 py-2 px-3 rounded-lg" style="background:rgba(16,185,129,0.15);border:1px solid #10b981">
+            <span style="color:#10b981;font-size:1.2rem">✅</span>
+            <span style="color:#10b981;font-weight:600;font-size:0.875rem">AUTORIZACIÓN DE VENTA FIRMADA</span>
+        </div>
+        <div id="modalCarteraNoSaleAuthBadge" class="hidden mb-4 flex items-center gap-2 py-2 px-3 rounded-lg" style="background:rgba(239,68,68,0.1);border:1px solid #ef4444">
+            <span style="color:#ef4444;font-size:1.1rem">⏳</span>
+            <span style="color:#ef4444;font-weight:600;font-size:0.875rem">Sin autorización de venta aún</span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+            <div><strong class="text-gray-600">Teléfono:</strong> <span id="modalCarteraOwnerPhone">-</span></div>
+            <div><strong class="text-gray-600">Zona:</strong> <span id="modalCarteraPropertyZone">-</span></div>
+            <div><strong class="text-gray-600">Precio:</strong> <span id="modalCarteraPrice">-</span></div>
+            <div><strong class="text-gray-600">Situación:</strong> <span id="modalCarteraStatus">-</span></div>
+            <div><strong class="text-gray-600">Honorarios:</strong> <span id="modalCarteraHonorarios" style="color:#10b981;font-weight:600">-</span></div>
+            <div class="md:col-span-2"><strong class="text-gray-600">Enlace:</strong> <span id="modalCarteraPropertyUrl" class="break-all">-</span></div>
+            <div id="modalCarteraConvertedInfo" class="hidden md:col-span-2 text-xs py-1 px-2 rounded" style="background:rgba(59,130,246,0.1);color:#3b82f6">🔄 Captado desde Seguimiento Particular</div>
+        </div>
+        <div class="mt-6">
+            <h3 class="text-lg font-semibold mb-2">Comentario</h3>
+            <div id="modalCarteraComments" class="p-3 bg-gray-50 rounded-md text-gray-700 min-h-[80px] whitespace-pre-wrap">-</div>
+        </div>
+        <!-- Ficha operación cerrada (se muestra solo si hay datos) -->
+        <div id="modalCarteraClosingSection" class="hidden mt-6 rounded-xl p-5" style="background:linear-gradient(135deg,rgba(16,185,129,0.08) 0%,rgba(5,150,105,0.12) 100%);border:1.5px solid rgba(16,185,129,0.4)">
+            <div class="flex items-center gap-2 mb-4">
+                <span style="font-size:1.3rem">🏆</span>
+                <h3 style="font-weight:700;font-size:1rem;color:#065f46;margin:0">Operación Cerrada</h3>
+                <span style="margin-left:auto;background:#10b981;color:#fff;font-size:0.65rem;padding:2px 8px;border-radius:999px;font-weight:700">CERRADA</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                <div><strong class="text-gray-600">Fecha firma:</strong> <span id="modalCarteraClosingDate">-</span></div>
+                <div><strong class="text-gray-600">Notaría:</strong> <span id="modalCarteraNotary">-</span></div>
+                <div><strong class="text-gray-600">Comisión:</strong> <span id="modalCarteraCommission" style="font-weight:700;color:#10b981">-</span></div>
+                <div><strong class="text-gray-600">% Comisión:</strong> <span id="modalCarteraCommissionPct">-</span></div>
+                <div class="sm:col-span-2"><strong class="text-gray-600">Banco / Hipoteca:</strong> <span id="modalCarteraBankName">-</span></div>
+                <div class="sm:col-span-2"><strong class="text-gray-600">Notas cierre:</strong> <span id="modalCarteraClosingNotes" class="whitespace-pre-wrap">-</span></div>
+            </div>
+        </div>
+        <div class="mt-8 flex flex-col sm:flex-row justify-between items-center space-y-3 sm:space-y-0">
+            <button id="viewCarteraOnlineBtn" class="btn-secondary" data-cartera-id="" disabled>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.586 2.586a2 2 0 00-2.828 0L8.343 3.999a2 2 0 102.828 2.829L12.586 5.414a2 2 0 000-2.828zM7.414 12.586a2 2 0 002.828 0L11.657 11.17a2 2 0 10-2.828-2.828L7.414 9.757a2 2 0 000 2.829zm2.172-6.757a3.5 3.5 0 010 4.95l-2.5 2.5a3.5 3.5 0 11-4.95-4.95l2.5-2.5a3.5 3.5 0 014.95 0zm6.757 2.172a3.5 3.5 0 010 4.95l-2.5 2.5a3.5 3.5 0 01-4.95-4.95l.707-.707a1.5 1.5 0 012.121 2.121l-.707.707a1.5 1.5 0 002.121 2.121l2.5-2.5a1.5 1.5 0 00-2.121-2.121l-.707.707a3.501 3.501 0 01-3.535-1.414A3.485 3.485 0 015.828 7.5H5a1 1 0 110-2h.828a3.5 3.5 0 014.95 0z" clip-rule="evenodd" /></svg>
+                Ver Anuncio
+            </button>
+            <div class="flex space-x-3">
+                <button id="editCarteraModalBtn" class="btn-secondary" data-cartera-id="">Editar</button>
+                <button id="deleteCarteraModalBtn" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md font-medium" data-cartera-id="">Eliminar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para Imagen Ampliada -->
+<div id="imageZoomModal" class="modal">
+    <div class="modal-content" style="background-color: transparent; box-shadow: none; display: flex; align-items: center; justify-content: center; padding: 1rem;">
+        <span class="close-modal-btn" onclick="closeModal('imageZoomModal')" style="position: absolute; top: 10px; right: 20px; font-size: 40px; color: white; text-shadow: 0 0 5px black;">&times;</span>
+        <img id="zoomedImage" src="#" alt="Imagen Ampliada" style="max-width: 95vw; max-height: 95vh; object-fit: contain; border-radius: 0.5rem; box-shadow: 0 0 25px rgba(0,0,0,0.5);">
+    </div>
+</div>
+
+
+<!-- ===== MODAL STAT DETAIL ===== -->
+<div id="statDetailModal" class="modal">
+    <div class="modal-content" style="max-width:580px">
+        <span class="close-modal-btn" onclick="closeModal('statDetailModal')">×</span>
+        <h2 id="sdmTitle" class="text-xl font-bold mb-1 pr-8">Detalle</h2>
+        <p id="sdmSubtitle" class="text-sm text-gray-400 mb-4"></p>
+        <!-- WA batch -->
+        <div id="sdmWASection" class="hidden mb-4 rounded-xl p-4" style="background:rgba(37,211,102,0.07);border:1px solid rgba(37,211,102,0.28)">
+            <div class="flex flex-wrap items-center gap-3">
+                <span style="color:#25d366;font-weight:700;font-size:0.85rem;white-space:nowrap">📱 WhatsApp masivo</span>
+                <select id="sdmWATemplate" class="form-control flex-1 text-sm py-1" style="min-width:180px"></select>
+                <button onclick="sdmSendAll()" class="px-4 py-1.5 rounded-lg text-sm font-semibold text-white flex-shrink-0" style="background:#25d366">📤 Enviar a todos</button>
+            </div>
+        </div>
+        <!-- List -->
+        <div id="sdmList" class="flex flex-col gap-2" style="max-height:62vh;overflow-y:auto;padding-right:4px"></div>
+        <div id="sdmEmpty" class="hidden text-center py-10 text-gray-400 text-sm">Sin registros en esta categoría</div>
+    </div>
+</div>
+<!-- ===== /MODAL STAT DETAIL ===== -->
+
+<footer>
+    <span id="currentYear"></span> INMOBASE &mdash; CRM Inmobiliario
+</footer>
+</div><!-- /#main-content -->
+</div><!-- /#app-shell -->
+
+<!-- Modal de notificación de Matches -->
+
+<!-- Modal generador WhatsApp con plantillas -->
+<div id="whatsappModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[300] hidden" onclick="closeWaModal()">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xl mx-4 overflow-hidden" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between px-6 py-4 rounded-t-2xl" style="background:linear-gradient(135deg,#25D366,#128C7E)">
+            <div>
+                <h2 class="text-lg font-bold text-white" id="waModalTitle">Enviar WhatsApp</h2>
+                <p class="text-xs text-green-100 mt-0.5" id="waModalSubtitle"></p>
+            </div>
+            <button onclick="closeWaModal()" class="text-white hover:text-gray-200 text-2xl leading-none font-bold">&times;</button>
+        </div>
+        <div class="p-6 space-y-4">
+            <div>
+                <label class="text-sm font-semibold text-gray-700 dark:text-gray-300 block mb-1">Plantilla</label>
+                <select id="waTemplateSelect" class="form-control" onchange="onWaTemplateChange()"></select>
+            </div>
+            <div id="waPropertySelector" class="hidden">
+                <label class="text-sm font-semibold text-gray-700 dark:text-gray-300 block mb-1">Propiedad a presentar</label>
+                <select id="waPropertySelect" class="form-control" onchange="onWaPropertyChange()"></select>
+            </div>
+            <div>
+                <label class="text-sm font-semibold text-gray-700 dark:text-gray-300 block mb-1">Mensaje <span class="font-normal text-gray-400">(editable antes de enviar)</span></label>
+                <textarea id="waMessageText" class="form-control resize-none text-sm leading-relaxed" rows="8"></textarea>
+            </div>
+            <p class="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                "Enviar y registrar" añade una nota en Comentarios con la fecha y plantilla usada.
+            </p>
+        </div>
+        <div class="px-6 py-4 border-t dark:border-gray-700 flex gap-3">
+            <button onclick="sendFromWaModal(false)" class="flex-1 btn-secondary text-sm py-2">Abrir WhatsApp</button>
+            <button onclick="sendFromWaModal(true)" class="flex-1 py-2 px-4 rounded-lg text-sm font-semibold text-white hover:opacity-90" style="background:#25D366">✓ Enviar y Registrar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Búsqueda global -->
+<div id="globalSearchContainer" style="position:relative;">
+    <div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:999px;padding:5px 14px;min-width:220px;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="globalSearchInput" type="text" placeholder="Buscar clientes, inmuebles..." autocomplete="off"
+            style="background:transparent;border:none;outline:none;color:#e2e8f0;font-size:12px;width:100%;min-width:0"
+            oninput="runGlobalSearch(this.value)" onkeydown="if(event.key==='Escape')closeGlobalSearch()">
+    </div>
+    <div id="globalSearchResults" class="hidden" style="position:absolute;top:calc(100% + 6px);right:0;min-width:360px;max-width:480px;background:#1e293b;border:1px solid #334155;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.4);z-index:999;max-height:420px;overflow-y:auto;"></div>
+</div>
+
+<!-- Notification Bell -->
+<div id="notifBellContainer">
+    <div id="notifBell" onclick="toggleNotifPanel()" title="Notificaciones">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span id="notifBellCount" class="hidden">0</span>
+    </div>
+    <div id="notifPanel" class="hidden">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-slate-700">
+            <span class="text-xs font-bold text-slate-300 uppercase tracking-wide">Notificaciones</span>
+            <button onclick="toggleNotifPanel()" class="text-slate-400 hover:text-white text-lg leading-none">&times;</button>
+        </div>
+        <div id="notifPanelBody"></div>
+    </div>
+</div>
+
+<!-- Resumen Semanal Modal -->
+<div id="weeklySummaryModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[350] hidden" onclick="closeWeeklySummary()">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xl mx-4 overflow-hidden" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-indigo-600 to-purple-600">
+            <div>
+                <h2 class="text-lg font-bold text-white">📋 Resumen Semanal</h2>
+                <p class="text-xs text-indigo-200" id="weeklySummaryDate"></p>
+            </div>
+            <button onclick="closeWeeklySummary()" class="text-white text-2xl font-bold leading-none hover:text-indigo-200">&times;</button>
+        </div>
+        <div id="weeklySummaryBody" class="p-6 space-y-4 max-h-[70vh] overflow-y-auto"></div>
+        <div class="px-6 py-4 border-t dark:border-gray-700 flex justify-between items-center">
+            <button onclick="copyWeeklySummary()" class="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">📋 Copiar texto</button>
+            <button onclick="closeWeeklySummary()" class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<!-- WA Queue Modal -->
+<div id="waQueueModal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[400] hidden" onclick="event.stopPropagation()">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xl mx-4" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between px-6 py-4 rounded-t-2xl" style="background:linear-gradient(135deg,#25D366,#128C7E)">
+            <div>
+                <h2 class="text-lg font-bold text-white">📱 Cola WhatsApp</h2>
+                <p class="text-xs text-green-100" id="waQueueCounter">1 de 1</p>
+            </div>
+            <button onclick="closeWaQueue()" class="text-white text-2xl font-bold leading-none hover:text-green-200">&times;</button>
+        </div>
+        <div class="px-6 pt-5 pb-3">
+            <p class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3" id="waQueueRecipient"></p>
+            <textarea id="waQueueMessage" class="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 text-sm font-mono bg-white dark:bg-gray-750 text-gray-900 dark:text-gray-100 resize-y" rows="8"></textarea>
+        </div>
+        <div class="px-6 py-4 border-t dark:border-gray-700 flex gap-3">
+            <button onclick="sendWaQueueCurrent(false)" class="flex-1 px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">Abrir WhatsApp</button>
+            <button onclick="sendWaQueueCurrent(true)" class="flex-1 py-2 px-4 rounded-lg text-sm font-semibold text-white hover:opacity-90" style="background:#25D366">Enviar y Siguiente →</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL AGENDA DEL DÍA -->
+<div id="agendaModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[250] hidden" onclick="if(event.target===this)closeAgendaModal()">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xl mx-4 overflow-hidden" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700" style="background:linear-gradient(135deg,#f59e0b,#d97706)">
+            <div>
+                <h2 class="text-lg font-bold text-white">📅 Agenda del día</h2>
+                <p class="text-xs text-amber-100">Tienes <span id="agendaModalCount" class="font-bold">0</span> seguimiento(s) vencido(s) o para hoy</p>
+            </div>
+            <button onclick="closeAgendaModal()" class="text-white hover:text-gray-200 text-2xl leading-none">&times;</button>
+        </div>
+        <div id="agendaModalBody" class="max-h-[60vh] overflow-y-auto px-6 py-2"></div>
+        <div class="px-6 py-3 bg-gray-50 dark:bg-gray-750 flex justify-end gap-3">
+            <button onclick="closeAgendaModal();document.querySelector('.tab-btn[data-tab=&quot;seguimientoParticulares&quot;]').click()" class="px-4 py-2 rounded-lg text-sm font-medium" style="background:#f59e0b;color:#fff;">Ver todos los particulares</button>
+            <button onclick="closeAgendaModal()" class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<div id="matchNotificationModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[200] hidden" onclick="closeMatchModal()">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700 bg-gradient-to-r from-purple-600 to-indigo-600">
+            <div>
+                <h2 class="text-lg font-bold text-white" id="matchModalTitle">Matches encontrados</h2>
+                <p class="text-xs text-purple-200" id="matchModalSubtitle"></p>
+            </div>
+            <button onclick="closeMatchModal()" class="text-white hover:text-gray-200 text-2xl leading-none">&times;</button>
+        </div>
+        <div id="matchModalBody" class="max-h-96 overflow-y-auto divide-y dark:divide-gray-700"></div>
+        <div class="px-6 py-3 bg-gray-50 dark:bg-gray-750 flex justify-between items-center">
+            <button id="matchSendAllBtn" onclick="startWaQueueFromModal()" class="btn-whatsapp text-sm px-3 py-1.5 hidden">📱 Enviar WA a todos</button>
+            <button onclick="closeMatchModal()" class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 ml-auto">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<!-- CDN de Supabase -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js"></script>
+</body>
+</html>

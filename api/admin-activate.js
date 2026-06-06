@@ -61,12 +61,15 @@ export default async function handler(req, res) {
         const email = req.query.email?.trim().toLowerCase();
         if (!email) return res.status(400).json({ error: 'Email requerido' });
 
-        // Buscar usuario en auth.users via admin API
-        const { data: users, error: authErr } = await supabase.auth.admin.listUsers();
-        if (authErr) return res.status(500).json({ error: authErr.message });
-
-        const user = users.users.find(u => u.email?.toLowerCase() === email);
-        if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+        // Buscar usuario directamente por email sin descargar toda la lista
+        const gotrueRes = await fetch(
+            `${process.env.SUPABASE_URL}/auth/v1/admin/users?email=${encodeURIComponent(email)}&per_page=1`,
+            { headers: { apikey: process.env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}` } }
+        );
+        if (!gotrueRes.ok) return res.status(500).json({ error: 'Error consultando usuarios' });
+        const { users: foundUsers } = await gotrueRes.json();
+        const user = foundUsers?.[0];
+        if (!user || user.email?.toLowerCase() !== email) return res.status(404).json({ error: 'Usuario no encontrado' });
 
         // Buscar suscripción
         const { data: sub } = await supabase

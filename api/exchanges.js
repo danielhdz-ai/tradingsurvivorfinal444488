@@ -43,6 +43,17 @@ export default async function handler(req, res) {
         return res.status(401).json({ success: false, error: 'Token inválido o expirado' });
     }
 
+    // Verificar plan PRO en servidor — el proxy de exchanges es una función premium
+    const { data: sub } = await supabase
+        .from('subscriptions')
+        .select('plan, status')
+        .eq('user_id', user.id)
+        .maybeSingle();
+    const isPro = sub && sub.plan === 'pro' && sub.status === 'active';
+    if (!isPro) {
+        return res.status(403).json({ success: false, error: 'La sincronización con exchanges requiere plan Pro.' });
+    }
+
     const exchange = detectExchange(req.url);
     if (!exchange) return res.status(400).json({ success: false, error: 'Unknown exchange' });
 

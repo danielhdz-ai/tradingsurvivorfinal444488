@@ -59,25 +59,21 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Email inválido' });
     }
 
-    // ── Registro nuevo: verificar JWT para evitar spam al admin ──────────────
-    if (type === 'register') {
-        if (!token) return res.status(401).json({ error: 'No autenticado' });
-        const { data: { user: authUser }, error: authErr } = await supabase.auth.getUser(token);
-        if (authErr || !authUser) return res.status(401).json({ error: 'Token inválido' });
-        if (authUser.email?.toLowerCase() !== email.toLowerCase()) {
-            return res.status(403).json({ error: 'No autorizado' });
-        }
-        await notifyNewRegister({ email, userId: authUser.id, timestamp: Date.now() });
-        return res.status(200).json({ ok: true });
+    // Verificar JWT obligatorio para todos los tipos
+    if (!token) return res.status(401).json({ error: 'No autenticado' });
+    const { data: { user: authUser }, error: authErr } = await supabase.auth.getUser(token);
+    if (authErr || !authUser) return res.status(401).json({ error: 'Token inválido' });
+
+    // El email del token siempre tiene prioridad sobre el body (evita suplantación)
+    const verifiedEmail = authUser.email?.toLowerCase();
+    if (verifiedEmail !== email.toLowerCase()) {
+        return res.status(403).json({ error: 'No autorizado' });
     }
 
-    // Para tipo 'crypto': verificar que el userId existe en Supabase
-    // para prevenir avisos de pago fraudulentos con emails ajenos
-    if (type === 'crypto' && userId) {
-        const { data: userCheck } = await supabase.auth.admin.getUserById(userId);
-        if (!userCheck?.user || userCheck.user.email?.toLowerCase() !== email.toLowerCase()) {
-            return res.status(403).json({ error: 'No autorizado' });
-        }
+    // ── Registro nuevo ────────────────────────────────────────────────────────
+    if (type === 'register') {
+        await notifyNewRegister({ email: verifiedEmail, userId: authUser.id, timestamp: Date.now() });
+        return res.status(200).json({ ok: true });
     }
 
     // ── Aviso pago cripto ─────────────────────────────────────────────────────
@@ -86,8 +82,8 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'Faltan campos crypto/address' });
         }
 
-        // 1. Notificar al admin
-        await notifyCryptoPayment({ email, userId, crypto, amount, address, timestamp: Date.now() });
+        // 1. Notificar al admin (usar siempre el userId/email del JWT, no del body)
+        await notifyCryptoPayment({ email: verifiedEmail, userId: authUser.id, crypto, amount, address, timestamp: Date.now() });
 
         // 2. Confirmación al usuario
         if (RESEND_API_KEY) {

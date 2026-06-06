@@ -1127,8 +1127,9 @@
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
             document.getElementById('navEmail').textContent = session.user.email;
-            window._userEmail = session.user.email;
-            window._userId   = session.user.id;
+            window._userEmail   = session.user.email;
+            window._userId      = session.user.id;
+            window._accessToken = session.access_token;
         } else {
             // Not logged in — redirect to register
             window.location.href = 'register.html';
@@ -1205,11 +1206,11 @@
                 // 1. Create PaymentIntent via backend
                 const res = await fetch('/api/create-checkout', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        userId: window._userId,
-                        email:  window._userEmail
-                    })
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${window._accessToken}`
+                    },
+                    body: JSON.stringify({ email: window._userEmail })
                 });
 
                 if (!res.ok) throw new Error('Error al crear sesión de pago');
@@ -1253,10 +1254,12 @@
             try {
                 const res = await fetch('/api/notify', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${window._accessToken}`
+                    },
                     body: JSON.stringify({
                         type:   'crypto',
-                        userId: window._userId,
                         email:  window._userEmail,
                         crypto: selectedCrypto,
                         amount: 129,
@@ -1347,7 +1350,6 @@
         s1.async=true;
         s1.src='https://embed.tawk.to/69b5b66603f68d1c33d1cde6/1jjmt1009';
         s1.charset='UTF-8';
-        s1.setAttribute('crossorigin','*');
         s0.parentNode.insertBefore(s1,s0);
     })();
     </script>

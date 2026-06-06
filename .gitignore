@@ -7,6 +7,15 @@ package-lock.json
 .env.local
 .env.*.local
 
+# Archivos de credenciales / notas con secretos
+Variables de entorno.txt
+SOLUCIONAR-*.md
+SOLUCIONAR-*.txt
+*credenciales*
+*credentials*.txt
+*secrets*.txt
+*claves*.txt
+
 # System files
 .DS_Store
 Thumbs.db
