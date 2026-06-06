@@ -40459,19 +40459,8 @@ async function checkUserSubscription(userId) {
     }
 }
 
-// Evita cargas duplicadas (checkAuth + onAuthStateChange disparan a la vez)
+// Mutex: evita que onUserLogin se ejecute en paralelo
 let _userLoginPromise = null;
-let _authSessionHandled = false;
-
-async function resolveAuthSession() {
-    const client = getSupabaseClient();
-    if (!client?.auth) return null;
-    let { data: { session } } = await client.auth.getSession();
-    if (session?.user) return session;
-    await new Promise(r => setTimeout(r, 800));
-    ({ data: { session } } = await client.auth.getSession());
-    return session?.user ? session : null;
-}
 
 // Sincronización cuando el usuario se conecta
 async function onUserLogin(user) {
@@ -42491,16 +42480,36 @@ const logoutBtn = document.getElementById('logoutBtn');
 
 // ===== INICIALIZACIÓN =====
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('🚀 Inicializando sistema de autenticación...');
-
-    // Esperar a que Supabase esté listo
     await initializeSupabase();
-
-    // Configurar event listeners
     setupEventListeners();
-
-    // Verificar sesión existente
-    await checkAuth();
+    // La sesión se gestiona exclusivamente en onAuthStateChange (INITIAL_SESSION).
+    // Fallback por si el evento tarda > 4 segundos (conexión lenta o bloqueado por ad-blocker).
+    setTimeout(async () => {
+        if (currentUser || window._logoutInProgress) return;
+        const client = getSupabaseClient();
+        if (!client?.auth) {
+            if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                window.location.replace('/login');
+            }
+            return;
+        }
+        try {
+            const { data: { session } } = await client.auth.getSession();
+            if (session?.user) {
+                if (!currentUser) {
+                    updateUserInfo(session.user);
+                    hideAuth();
+                    if (!_userLoginPromise) await onUserLogin(session.user);
+                }
+            } else if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                window.location.replace('/login');
+            }
+        } catch (_) {
+            if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                window.location.replace('/login');
+            }
+        }
+    }, 4000);
 });
 
 // ===== EVENT LISTENERS =====
@@ -42710,10 +42719,7 @@ async function checkAuth() {
             console.log('✅ Usuario logueado:', session.user.email);
             updateUserInfo(session.user);
             hideAuth();
-            if (!_authSessionHandled) {
-                _authSessionHandled = true;
-                await onUserLogin(session.user);
-            }
+            if (!_userLoginPromise) await onUserLogin(session.user);
         } else {
             console.log('⚠️ No hay sesión activa - redirigiendo a login');
             if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
@@ -42790,10 +42796,7 @@ async function handleLogin(e) {
             hideAuth();
             hideMessage();
 
-            if (!_authSessionHandled) {
-                _authSessionHandled = true;
-                await onUserLogin(data.user);
-            }
+            if (!_userLoginPromise) await onUserLogin(data.user);
         }, 1000);
 
     } catch (error) {
@@ -42882,7 +42885,6 @@ async function handleRegister(e) {
 async function performFullLogout() {
     if (window._logoutInProgress) return;
     window._logoutInProgress = true;
-    _authSessionHandled = false;
     sessionStorage.setItem('ts_logged_out', String(Date.now()));
     window.location.href = '/logout.html';
 }
@@ -42915,10 +42917,9 @@ initializeSupabase().then(() => {
     if (supabase && supabase.auth) {
         supabase.auth.onAuthStateChange(async (event, session) => {
             if (window._logoutInProgress) return;
-            console.log('🔄 Cambio de estado de autenticación:', event);
+            console.log('🔄 Auth event:', event, session?.user?.email || 'no user');
 
             if (event === 'SIGNED_OUT') {
-                _authSessionHandled = false;
                 if (typeof onUserLogout === 'function') onUserLogout();
                 clearUserInfo();
                 if (!window._logoutInProgress && !location.pathname.includes('login')) {
@@ -42927,15 +42928,20 @@ initializeSupabase().then(() => {
                 return;
             }
 
-            if (event === 'INITIAL_SESSION' && session?.user) {
-                updateUserInfo(session.user);
-                hideAuth();
-                if (!_authSessionHandled) {
-                    _authSessionHandled = true;
-                    await onUserLogin(session.user);
-                }
-                if (typeof processGroupInvitation === 'function') {
-                    await processGroupInvitation();
+            if (event === 'INITIAL_SESSION') {
+                if (session?.user) {
+                    updateUserInfo(session.user);
+                    hideAuth();
+                    // _userLoginPromise actúa de mutex si ya hay una carga en curso
+                    if (!_userLoginPromise) await onUserLogin(session.user);
+                    if (typeof processGroupInvitation === 'function') {
+                        await processGroupInvitation().catch(() => {});
+                    }
+                } else {
+                    // No hay sesión al cargar la plataforma → enviar a login
+                    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                        window.location.replace('/login');
+                    }
                 }
                 return;
             }
@@ -42943,11 +42949,11 @@ initializeSupabase().then(() => {
             if (event === 'SIGNED_IN' && session?.user) {
                 updateUserInfo(session.user);
                 hideAuth();
-                _authSessionHandled = false;
-                await onUserLogin(session.user);
-                _authSessionHandled = true;
+                // SIGNED_IN puede dispararse después de INITIAL_SESSION en el mismo tab;
+                // si _userLoginPromise existe, ya se está cargando — no duplicar.
+                if (!_userLoginPromise) await onUserLogin(session.user);
                 if (typeof processPendingInvitation === 'function') {
-                    await processPendingInvitation();
+                    await processPendingInvitation().catch(() => {});
                 }
             }
         });
