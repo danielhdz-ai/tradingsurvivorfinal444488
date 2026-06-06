@@ -42480,73 +42480,8 @@ const logoutBtn = document.getElementById('logoutBtn');
 
 // ===== INICIALIZACIÓN =====
 document.addEventListener('DOMContentLoaded', async () => {
-    const isProd = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-
-    // 1. Inicializar Supabase
     await initializeSupabase();
     setupEventListeners();
-
-    const client = getSupabaseClient();
-    if (!client?.auth) {
-        if (isProd) window.location.replace('/login');
-        return;
-    }
-
-    // 2. Implicit flow: #access_token= en el hash → extraer y establecer sesión manualmente
-    if (window.location.hash.includes('access_token=')) {
-        console.log('🔑 Implicit flow detectado — procesando access_token del hash...');
-        try {
-            const hashParams = new URLSearchParams(window.location.hash.substring(1));
-            const accessToken  = hashParams.get('access_token');
-            const refreshToken = hashParams.get('refresh_token') || '';
-            if (accessToken) {
-                const { data, error } = await client.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-                console.log('🔐 setSession:', data?.session?.user?.email || 'sin sesión', error || '');
-                if (data?.session?.user) {
-                    // Limpiar el hash de la URL (no exponer el token en la barra)
-                    window.history.replaceState(null, '', window.location.pathname);
-                    updateUserInfo(data.session.user);
-                    hideAuth();
-                    if (!_userLoginPromise) await onUserLogin(data.session.user);
-                    return;
-                }
-            }
-        } catch (e) {
-            console.error('❌ Error procesando implicit flow:', e);
-        }
-        if (isProd) window.location.replace('/login');
-        return;
-    }
-
-    // 3. PKCE flow: ?code= en la URL → Supabase SDK lo procesa automáticamente; esperar SIGNED_IN
-    if (new URLSearchParams(window.location.search).has('code')) {
-        console.log('🔑 PKCE flow detectado — esperando SIGNED_IN de Supabase...');
-        setTimeout(() => {
-            if (!currentUser && isProd) window.location.replace('/login');
-        }, 12000);
-        return;
-    }
-
-    // 4. Sesión existente (email login u OAuth previo) → getSession directo
-    try {
-        const { data: { session }, error } = await client.auth.getSession();
-        console.log('🔐 getSession():', session?.user?.email || 'sin sesión', error || '');
-        if (session?.user) {
-            if (!currentUser) {
-                updateUserInfo(session.user);
-                hideAuth();
-                if (!_userLoginPromise) await onUserLogin(session.user);
-            }
-        } else {
-            if (isProd) {
-                console.warn('⚠️ Sin sesión — redirigiendo a /login');
-                window.location.replace('/login');
-            }
-        }
-    } catch (err) {
-        console.error('❌ Error en getSession():', err);
-        if (isProd) window.location.replace('/login');
-    }
 });
 
 // ===== EVENT LISTENERS =====
@@ -42992,20 +42927,39 @@ function _tsOAuthLog(msg, extra) {
 })();
 
 // ===== LISTENERS DE SUPABASE =====
-// onAuthStateChange maneja cambios de sesión DESPUÉS del arranque inicial.
-// El arranque inicial (getSession + redirect) lo gestiona DOMContentLoaded.
-initializeSupabase().then(() => {
+const _isProd = location.hostname !== 'localhost' && location.hostname !== '127.0.0.1';
+
+initializeSupabase().then(async () => {
     if (!supabase?.auth) {
-        console.error('❌ Supabase no disponible para onAuthStateChange');
+        console.error('❌ Supabase no disponible');
+        if (_isProd) window.location.replace('/login');
         return;
     }
+
+    // Manejar implicit flow (#access_token=) ANTES de onAuthStateChange
+    if (location.hash.includes('access_token=')) {
+        console.log('🔑 Implicit flow — extrayendo token del hash');
+        try {
+            const p = new URLSearchParams(location.hash.substring(1));
+            const { data, error } = await supabase.auth.setSession({
+                access_token: p.get('access_token'),
+                refresh_token: p.get('refresh_token') || ''
+            });
+            if (data?.session?.user) {
+                history.replaceState(null, '', location.pathname);
+                console.log('✅ Sesión implicit flow:', data.session.user.email);
+            } else {
+                console.error('❌ setSession failed:', error?.message);
+            }
+        } catch(e) {
+            console.error('❌ Error implicit flow:', e);
+        }
+    }
+
     supabase.auth.onAuthStateChange(async (event, session) => {
         if (window._logoutInProgress) return;
         console.log('🔄 Auth event:', event, session?.user?.email || 'sin usuario');
-        _tsOAuthLog('auth_event', { event: event, user: session?.user?.email || null });
-        if (window._tsDebugPanel) window._tsDebugPanel('Auth: <b style="color:#4ade80">' + event + '</b>' + (session?.user ? ' ✅ ' + session.user.email : ' ❌ sin sesión'));
 
-        // SIGNED_OUT → siempre redirigir a login
         if (event === 'SIGNED_OUT') {
             if (typeof onUserLogout === 'function') onUserLogout();
             clearUserInfo();
@@ -43013,21 +42967,19 @@ initializeSupabase().then(() => {
             return;
         }
 
-        // INITIAL_SESSION con sesión → loguear si DOMContentLoaded no lo hizo ya
-        if (event === 'INITIAL_SESSION' && session?.user) {
+        if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && session?.user) {
             updateUserInfo(session.user);
             hideAuth();
             if (!_userLoginPromise) await onUserLogin(session.user);
             return;
         }
 
-        // SIGNED_IN → OAuth callback completado (code → tokens)
-        if (event === 'SIGNED_IN' && session?.user) {
-            updateUserInfo(session.user);
-            hideAuth();
-            if (!_userLoginPromise) await onUserLogin(session.user);
-            if (typeof processPendingInvitation === 'function') {
-                await processPendingInvitation().catch(() => {});
+        // Sin sesión en INITIAL_SESSION → verificar si es OAuth en proceso
+        if (event === 'INITIAL_SESSION' && !session?.user) {
+            const hasOAuth = location.search.includes('code=') || location.hash.includes('access_token');
+            if (!hasOAuth && _isProd) {
+                console.warn('⚠️ Sin sesión → /login');
+                window.location.replace('/login');
             }
         }
     });
