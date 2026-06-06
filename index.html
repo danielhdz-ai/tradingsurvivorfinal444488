@@ -7,7 +7,21 @@
     <script>
         (function(){
             var s = location.search, h = location.hash;
+            var ts = new Date().toISOString();
+            // Log de diagnóstico
+            try {
+                var log = JSON.parse(localStorage.getItem('ts_oauth_log') || '[]');
+                log.push({ t: ts, page: 'index', url: location.href, search: s, hash: h ? '(hash present)' : '' });
+                if (log.length > 20) log = log.slice(-20);
+                localStorage.setItem('ts_oauth_log', JSON.stringify(log));
+            } catch(e) {}
+
             if (s.indexOf('code=') !== -1 || h.indexOf('access_token=') !== -1 || h.indexOf('type=recovery') !== -1) {
+                try {
+                    var log2 = JSON.parse(localStorage.getItem('ts_oauth_log') || '[]');
+                    log2.push({ t: ts, page: 'index→redirect', dest: '/app' + s });
+                    localStorage.setItem('ts_oauth_log', JSON.stringify(log2));
+                } catch(e) {}
                 location.replace('/app' + s + h);
             }
         })();

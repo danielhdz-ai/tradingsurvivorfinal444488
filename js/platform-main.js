@@ -42480,40 +42480,49 @@ const logoutBtn = document.getElementById('logoutBtn');
 
 // ===== INICIALIZACIÓN =====
 document.addEventListener('DOMContentLoaded', async () => {
+    const isProd = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+    const hasOAuthCode = new URLSearchParams(window.location.search).has('code')
+                      || window.location.hash.includes('access_token');
+
+    // 1. Inicializar Supabase (espera a que el módulo dispare supabase-ready)
     await initializeSupabase();
     setupEventListeners();
-    // La sesión se gestiona exclusivamente en onAuthStateChange (INITIAL_SESSION).
-    // Fallback por si el evento tarda > 8 segundos (conexión lenta o bloqueado por ad-blocker).
-    setTimeout(async () => {
-        if (currentUser || window._logoutInProgress) return;
-        // Si hay un ?code= en la URL es un callback OAuth en proceso — no interrumpir
-        const hasOAuthCode = new URLSearchParams(window.location.search).has('code')
-                          || window.location.hash.includes('access_token');
-        if (hasOAuthCode) return;
+
+    // 2. Si hay ?code= es un callback OAuth — dejar que onAuthStateChange lo procese
+    if (hasOAuthCode) {
+        console.log('🔑 OAuth callback detectado — esperando SIGNED_IN...');
+        // Si en 15s no hay sesión, algo falló
+        setTimeout(() => {
+            if (!currentUser && isProd) window.location.replace('/login');
+        }, 15000);
+        return;
+    }
+
+    // 3. Verificar sesión DIRECTAMENTE (no esperar a onAuthStateChange)
+    try {
         const client = getSupabaseClient();
         if (!client?.auth) {
-            if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-                window.location.replace('/login');
-            }
+            if (isProd) window.location.replace('/login');
             return;
         }
-        try {
-            const { data: { session } } = await client.auth.getSession();
-            if (session?.user) {
-                if (!currentUser) {
-                    updateUserInfo(session.user);
-                    hideAuth();
-                    if (!_userLoginPromise) await onUserLogin(session.user);
-                }
-            } else if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-                window.location.replace('/login');
+        const { data: { session }, error } = await client.auth.getSession();
+        console.log('🔐 getSession():', session?.user?.email || 'sin sesión', error || '');
+        if (session?.user) {
+            if (!currentUser) {
+                updateUserInfo(session.user);
+                hideAuth();
+                if (!_userLoginPromise) await onUserLogin(session.user);
             }
-        } catch (_) {
-            if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        } else {
+            if (isProd) {
+                console.warn('⚠️ Sin sesión — redirigiendo a /login');
                 window.location.replace('/login');
             }
         }
-    }, 8000);
+    } catch (err) {
+        console.error('❌ Error en getSession():', err);
+        if (isProd) window.location.replace('/login');
+    }
 });
 
 // ===== EVENT LISTENERS =====
@@ -42915,57 +42924,89 @@ function getErrorMessage(errorMsg) {
     return errorMessages[errorMsg] || errorMsg;
 }
 
+// ===== DIAGNÓSTICO OAUTH =====
+(function() {
+    try {
+        var s = location.search, h = location.hash;
+        var log = JSON.parse(localStorage.getItem('ts_oauth_log') || '[]');
+        log.push({ t: new Date().toISOString(), page: 'platform', url: location.href, hasCode: s.indexOf('code=') !== -1, hasToken: h.indexOf('access_token') !== -1 });
+        if (log.length > 20) log = log.slice(-20);
+        localStorage.setItem('ts_oauth_log', JSON.stringify(log));
+        console.log('🔍 [OAUTH-DEBUG] platform.html cargado. URL:', location.href);
+        console.log('🔍 [OAUTH-DEBUG] ¿code en URL?', s.indexOf('code=') !== -1);
+        console.log('🔍 [OAUTH-DEBUG] ¿access_token en hash?', h.indexOf('access_token') !== -1);
+    } catch(e) {}
+})();
+
+function _tsOAuthLog(msg, extra) {
+    try {
+        var log = JSON.parse(localStorage.getItem('ts_oauth_log') || '[]');
+        log.push(Object.assign({ t: new Date().toISOString(), msg: msg }, extra || {}));
+        if (log.length > 30) log = log.slice(-30);
+        localStorage.setItem('ts_oauth_log', JSON.stringify(log));
+    } catch(e) {}
+    console.log('🔍 [OAUTH-DEBUG]', msg, extra || '');
+}
+
+// Panel de debug visible (aparece 8s) cuando hay ?ts_debug=1 o código OAuth
+(function() {
+    var showDebug = location.search.indexOf('ts_debug=1') !== -1
+                 || location.search.indexOf('code=') !== -1
+                 || location.hash.indexOf('access_token') !== -1;
+    if (!showDebug) return;
+    document.addEventListener('DOMContentLoaded', function() {
+        var div = document.createElement('div');
+        div.id = 'ts-debug-panel';
+        div.style.cssText = 'position:fixed;top:10px;right:10px;z-index:99999;background:#0f172a;color:#38bdf8;border:2px solid #38bdf8;border-radius:8px;padding:12px 16px;max-width:380px;font-family:monospace;font-size:11px;line-height:1.5;box-shadow:0 4px 24px rgba(0,0,0,0.6)';
+        div.innerHTML = '<b style="color:#f59e0b">🔍 DEBUG OAUTH</b><br>URL: ' + location.href.substring(0, 80) + '<br><span id="ts-debug-events">Esperando auth event...</span><br><button onclick="var l=JSON.parse(localStorage.getItem(\'ts_oauth_log\')||\'[]\');alert(JSON.stringify(l,null,2))" style="margin-top:6px;background:#38bdf8;color:#0f172a;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px">Ver log completo</button> <button onclick="document.getElementById(\'ts-debug-panel\').remove()" style="margin-top:6px;background:#475569;color:#fff;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px">Cerrar</button>';
+        document.body.appendChild(div);
+        window._tsDebugPanel = function(msg) {
+            var el = document.getElementById('ts-debug-events');
+            if (el) el.innerHTML = msg;
+        };
+    });
+})();
+
 // ===== LISTENERS DE SUPABASE =====
-// Configurar listener cuando Supabase esté listo
+// onAuthStateChange maneja cambios de sesión DESPUÉS del arranque inicial.
+// El arranque inicial (getSession + redirect) lo gestiona DOMContentLoaded.
 initializeSupabase().then(() => {
-    if (supabase && supabase.auth) {
-        supabase.auth.onAuthStateChange(async (event, session) => {
-            if (window._logoutInProgress) return;
-            console.log('🔄 Auth event:', event, session?.user?.email || 'no user');
-
-            if (event === 'SIGNED_OUT') {
-                if (typeof onUserLogout === 'function') onUserLogout();
-                clearUserInfo();
-                if (!window._logoutInProgress && !location.pathname.includes('login')) {
-                    window.location.replace('/login');
-                }
-                return;
-            }
-
-            if (event === 'INITIAL_SESSION') {
-                if (session?.user) {
-                    updateUserInfo(session.user);
-                    hideAuth();
-                    if (!_userLoginPromise) await onUserLogin(session.user);
-                    if (typeof processGroupInvitation === 'function') {
-                        await processGroupInvitation().catch(() => {});
-                    }
-                } else {
-                    // Si hay un ?code= en la URL es un callback OAuth — esperar a SIGNED_IN
-                    const hasOAuthCode = new URLSearchParams(window.location.search).has('code')
-                                      || window.location.hash.includes('access_token');
-                    if (!hasOAuthCode && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-                        window.location.replace('/login');
-                    }
-                    // Si hasOAuthCode → Supabase está procesando el token; SIGNED_IN llegará solo
-                }
-                return;
-            }
-
-            if (event === 'SIGNED_IN' && session?.user) {
-                updateUserInfo(session.user);
-                hideAuth();
-                // SIGNED_IN puede dispararse después de INITIAL_SESSION en el mismo tab;
-                // si _userLoginPromise existe, ya se está cargando — no duplicar.
-                if (!_userLoginPromise) await onUserLogin(session.user);
-                if (typeof processPendingInvitation === 'function') {
-                    await processPendingInvitation().catch(() => {});
-                }
-            }
-        });
-    } else {
-        console.error('❌ No se puede configurar listener de autenticación: Supabase no disponible');
+    if (!supabase?.auth) {
+        console.error('❌ Supabase no disponible para onAuthStateChange');
+        return;
     }
+    supabase.auth.onAuthStateChange(async (event, session) => {
+        if (window._logoutInProgress) return;
+        console.log('🔄 Auth event:', event, session?.user?.email || 'sin usuario');
+        _tsOAuthLog('auth_event', { event: event, user: session?.user?.email || null });
+        if (window._tsDebugPanel) window._tsDebugPanel('Auth: <b style="color:#4ade80">' + event + '</b>' + (session?.user ? ' ✅ ' + session.user.email : ' ❌ sin sesión'));
+
+        // SIGNED_OUT → siempre redirigir a login
+        if (event === 'SIGNED_OUT') {
+            if (typeof onUserLogout === 'function') onUserLogout();
+            clearUserInfo();
+            if (!window._logoutInProgress) window.location.replace('/login');
+            return;
+        }
+
+        // INITIAL_SESSION con sesión → loguear si DOMContentLoaded no lo hizo ya
+        if (event === 'INITIAL_SESSION' && session?.user) {
+            updateUserInfo(session.user);
+            hideAuth();
+            if (!_userLoginPromise) await onUserLogin(session.user);
+            return;
+        }
+
+        // SIGNED_IN → OAuth callback completado (code → tokens)
+        if (event === 'SIGNED_IN' && session?.user) {
+            updateUserInfo(session.user);
+            hideAuth();
+            if (!_userLoginPromise) await onUserLogin(session.user);
+            if (typeof processPendingInvitation === 'function') {
+                await processPendingInvitation().catch(() => {});
+            }
+        }
+    });
 });
 
 // ===== FUNCIONES GLOBALES =====
