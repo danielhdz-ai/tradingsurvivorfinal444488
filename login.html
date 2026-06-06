@@ -1019,10 +1019,12 @@
 </div>
 
 <script>
-    // Supabase ya disponible como global window.supabase via UMD
-    const SUPABASE_URL = 'https://gakiamardmlgftfrlxkm.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdha2lhbWFyZG1sZ2Z0ZnJseGttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwMjczMzUsImV4cCI6MjA2ODYwMzMzNX0.wR3c9DMtSXzoagFDJdrmYqnN6vjfQMn8ijtUdOSpmYM';
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    // El UMD de Supabase expone window.supabase (objeto con createClient).
+    // Usamos _sb como nombre local para evitar conflicto con la variable global 'supabase'.
+    const _sb = window.supabase.createClient(
+        'https://gakiamardmlgftfrlxkm.supabase.co',
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdha2lhbWFyZG1sZ2Z0ZnJseGttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwMjczMzUsImV4cCI6MjA2ODYwMzMzNX0.wR3c9DMtSXzoagFDJdrmYqnN6vjfQMn8ijtUdOSpmYM'
+    );
 
     // ─── Check if already logged in ─────────────────────────
     // En localhost/Live Server no redirigir automáticamente (facilita el diseño)
@@ -1034,7 +1036,7 @@
         const params = new URLSearchParams(window.location.search);
 
         if (params.get('logout') === '1') {
-            try { await supabase.auth.signOut({ scope: 'global' }); } catch (e) { /* ignore */ }
+            try { await _sb.auth.signOut({ scope: 'global' }); } catch (e) { /* ignore */ }
             sessionStorage.removeItem('ts_logged_out');
             window.history.replaceState({}, '', '/login');
             return;
@@ -1047,7 +1049,7 @@
         sessionStorage.removeItem('ts_logged_out');
 
         try {
-            const { data: { session } } = await supabase.auth.getSession();
+            const { data: { session } } = await _sb.auth.getSession();
             if (session) {
                 window.location.replace('/app');
             }
@@ -1086,7 +1088,7 @@
         try {
             // redirectTo = raíz del sitio (siempre en la allowlist de Supabase como Site URL).
             // El interceptor en index.html detecta ?code= y reenvía a /app automáticamente.
-            const { data, error } = await supabase.auth.signInWithOAuth({
+            const { data, error } = await _sb.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
                     redirectTo: window.location.origin + '/'
@@ -1111,7 +1113,7 @@
         setLoading(btn, true);
 
         try {
-            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            const { data, error } = await _sb.auth.signInWithPassword({ email, password });
             if (error) throw error;
             sessionStorage.removeItem('ts_logged_out');
             showMsg(msg, '¡Bienvenido de vuelta! Redirigiendo...', 'success');
@@ -1145,7 +1147,7 @@
         setLoading(btn, true);
 
         try {
-            const { data, error } = await supabase.auth.signUp({ email, password });
+            const { data, error } = await _sb.auth.signUp({ email, password });
             if (error) throw error;
 
             if (data.user && !data.session) {
@@ -1177,8 +1179,8 @@
         setLoading(btn, true, '<i class="fas fa-paper-plane"></i> Enviar Enlace');
 
         try {
-            const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: window.location.origin + '/app'
+            const { error } = await _sb.auth.resetPasswordForEmail(email, {
+                redirectTo: window.location.origin + '/'
             });
             if (error) throw error;
             showMsg(msg, '¡Enlace enviado! Revisa tu bandeja de entrada.', 'success');
@@ -1206,7 +1208,7 @@
     }
 
     // expose to global scope for inline handlers
-    window._supabase = supabase;
+    window._supabase = _sb;
 </script>
 
 <script>
