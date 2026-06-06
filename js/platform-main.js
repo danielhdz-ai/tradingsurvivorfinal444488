@@ -42929,36 +42929,18 @@ function _tsOAuthLog(msg, extra) {
 // ===== LISTENERS DE SUPABASE =====
 const _isProd = location.hostname !== 'localhost' && location.hostname !== '127.0.0.1';
 
-initializeSupabase().then(async () => {
+initializeSupabase().then(() => {
     if (!supabase?.auth) {
         console.error('❌ Supabase no disponible');
         if (_isProd) window.location.replace('/login');
         return;
     }
 
-    // Manejar implicit flow (#access_token=) ANTES de onAuthStateChange
-    if (location.hash.includes('access_token=')) {
-        console.log('🔑 Implicit flow — extrayendo token del hash');
-        try {
-            const p = new URLSearchParams(location.hash.substring(1));
-            const { data, error } = await supabase.auth.setSession({
-                access_token: p.get('access_token'),
-                refresh_token: p.get('refresh_token') || ''
-            });
-            if (data?.session?.user) {
-                history.replaceState(null, '', location.pathname);
-                console.log('✅ Sesión implicit flow:', data.session.user.email);
-            } else {
-                console.error('❌ setSession failed:', error?.message);
-            }
-        } catch(e) {
-            console.error('❌ Error implicit flow:', e);
-        }
-    }
+    console.log('✅ Registrando onAuthStateChange...');
 
     supabase.auth.onAuthStateChange(async (event, session) => {
         if (window._logoutInProgress) return;
-        console.log('🔄 Auth event:', event, session?.user?.email || 'sin usuario');
+        console.log('🔄 Auth event:', event, session?.user?.email || 'sin sesión');
 
         if (event === 'SIGNED_OUT') {
             if (typeof onUserLogout === 'function') onUserLogout();
@@ -42968,19 +42950,18 @@ initializeSupabase().then(async () => {
         }
 
         if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && session?.user) {
+            console.log('✅ Sesión detectada, cargando plataforma...');
             updateUserInfo(session.user);
             hideAuth();
             if (!_userLoginPromise) await onUserLogin(session.user);
             return;
         }
 
-        // Sin sesión en INITIAL_SESSION → verificar si es OAuth en proceso
         if (event === 'INITIAL_SESSION' && !session?.user) {
-            const hasOAuth = location.search.includes('code=') || location.hash.includes('access_token');
-            if (!hasOAuth && _isProd) {
-                console.warn('⚠️ Sin sesión → /login');
-                window.location.replace('/login');
-            }
+            // El SDK de Supabase v2 ya procesó cualquier #access_token o ?code de la URL
+            // Si no hay sesión aquí, el usuario no está autenticado
+            console.warn('⚠️ Sin sesión en INITIAL_SESSION');
+            if (_isProd) window.location.replace('/login');
         }
     });
 });
