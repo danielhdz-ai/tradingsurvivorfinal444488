@@ -42936,7 +42936,11 @@ initializeSupabase().then(() => {
         return;
     }
 
-    console.log('✅ Registrando onAuthStateChange...');
+    // Capturar URL ANTES de que el SDK pueda limpiarla
+    const _initHash   = location.hash;
+    const _initSearch = location.search;
+    const _hasOAuth   = _initHash.includes('access_token=') || _initSearch.includes('code=');
+    console.log('✅ Auth init | hasOAuth:', _hasOAuth, '| hash:', _initHash.substring(0, 40));
 
     supabase.auth.onAuthStateChange(async (event, session) => {
         if (window._logoutInProgress) return;
@@ -42950,7 +42954,7 @@ initializeSupabase().then(() => {
         }
 
         if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && session?.user) {
-            console.log('✅ Sesión detectada, cargando plataforma...');
+            console.log('✅ Sesión OK:', session.user.email);
             updateUserInfo(session.user);
             hideAuth();
             if (!_userLoginPromise) await onUserLogin(session.user);
@@ -42958,10 +42962,20 @@ initializeSupabase().then(() => {
         }
 
         if (event === 'INITIAL_SESSION' && !session?.user) {
-            // El SDK de Supabase v2 ya procesó cualquier #access_token o ?code de la URL
-            // Si no hay sesión aquí, el usuario no está autenticado
-            console.warn('⚠️ Sin sesión en INITIAL_SESSION');
-            if (_isProd) window.location.replace('/login');
+            if (_hasOAuth) {
+                // El SDK procesa #access_token de forma asíncrona.
+                // SIGNED_IN llegará en breve — no redirigir todavía.
+                console.log('⏳ OAuth detectado en URL, esperando SIGNED_IN...');
+                setTimeout(() => {
+                    if (!currentUser && _isProd) {
+                        console.warn('⏰ Timeout 10s sin SIGNED_IN → /login');
+                        window.location.replace('/login');
+                    }
+                }, 10000);
+            } else {
+                console.warn('⚠️ Sin sesión → /login');
+                if (_isProd) window.location.replace('/login');
+            }
         }
     });
 });
