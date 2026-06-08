@@ -33181,6 +33181,11 @@ if (typeof MutationObserver !== 'undefined') {
                 targetEl.classList.remove('ts-entering');
                 void targetEl.offsetWidth; // force reflow
                 targetEl.classList.add('ts-entering');
+                // Eliminar ts-entering al terminar la animación para destruir el
+                // stacking context que impide que modales fixed se superpongan al sidebar
+                targetEl.addEventListener('animationend', () => {
+                    targetEl.classList.remove('ts-entering');
+                }, { once: true });
             }
             
             // Re-inicializar pestañas si es una plataforma
@@ -64087,8 +64092,11 @@ window.RichTextEditor = RichTextEditor;
         
         currentSetupDetails = setup;
         
-        // Mostrar modal
+        // Mostrar modal — moverlo a <body> para evitar stacking context del section-container
         const modal = document.getElementById('setup-details-modal');
+        if (modal.parentElement !== document.body) {
+            document.body.appendChild(modal);
+        }
         modal.style.display = 'block';
         document.body.style.overflow = 'hidden';
         
