@@ -62409,27 +62409,162 @@ document.addEventListener('DOMContentLoaded', function() {
     
     function renderDayAnalysisImages(images) {
         const imagesView = document.getElementById('day-analysis-images-view');
+        imagesView.innerHTML = '';
+
         if (!images || images.length === 0) {
-            imagesView.innerHTML = '<p class="col-span-full text-center text-text-secondary italic py-8">Sin imágenes agregadas para este día.</p>';
-        } else {
-            imagesView.innerHTML = images.map((img, index) => `
-                <div class="relative group">
-                    <img src="${img}" alt="Imagen ${index + 1}" class="w-full h-48 object-cover rounded border border-border cursor-pointer hover:opacity-80 transition" onclick="viewImageFullscreen('${img}')">
-                    <button class="absolute top-2 right-2 bg-red text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition" onclick="deleteDayAnalysisImage(${index})" title="Eliminar">
-                        <i class="fas fa-trash text-xs"></i>
-                    </button>
-                </div>
-            `).join('');
+            imagesView.innerHTML = `
+                <div class="col-span-full flex flex-col items-center justify-center py-12 text-center">
+                    <i class="fas fa-images text-4xl text-text-muted mb-3"></i>
+                    <p class="text-text-secondary italic mb-1">Sin imágenes agregadas para este día.</p>
+                    <p class="text-xs text-text-muted">Usa el botón "Agregar Imágenes" o pega con <kbd style="background:rgba(255,255,255,0.1);padding:1px 6px;border-radius:4px;font-size:0.7rem;">Ctrl+V</kbd></p>
+                </div>`;
+            return;
         }
+
+        let dragSrcIndex = null;
+
+        images.forEach((img, index) => {
+            const card = document.createElement('div');
+            card.className = 'relative group rounded overflow-hidden border border-border';
+            card.style.cssText = 'cursor:grab;transition:opacity 0.15s,border-color 0.15s;';
+            card.draggable = true;
+            card.dataset.index = index;
+
+            const imgEl = document.createElement('img');
+            imgEl.src = img;
+            imgEl.alt = `Imagen ${index + 1}`;
+            imgEl.style.cssText = 'width:100%;height:192px;object-fit:cover;display:block;pointer-events:none;';
+
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0);display:flex;align-items:center;justify-content:center;transition:background 0.2s;pointer-events:none;';
+            overlay.innerHTML = '<i class="fas fa-expand" style="color:white;font-size:1.5rem;opacity:0;transition:opacity 0.2s;"></i>';
+
+            const delBtn = document.createElement('button');
+            delBtn.style.cssText = 'position:absolute;top:8px;right:8px;background:#dc2626;color:white;border:none;width:30px;height:30px;border-radius:50%;cursor:pointer;opacity:0;transition:opacity 0.2s;z-index:2;display:flex;align-items:center;justify-content:center;';
+            delBtn.innerHTML = '<i class="fas fa-trash" style="font-size:0.7rem;"></i>';
+            delBtn.title = 'Eliminar';
+
+            const badge = document.createElement('div');
+            badge.style.cssText = 'position:absolute;bottom:6px;left:8px;background:rgba(0,0,0,0.65);color:white;padding:2px 8px;border-radius:12px;font-size:0.7rem;opacity:0;transition:opacity 0.2s;';
+            badge.innerHTML = `<i class="fas fa-grip-vertical" style="margin-right:4px;"></i>${index + 1}`;
+
+            card.appendChild(imgEl);
+            card.appendChild(overlay);
+            card.appendChild(delBtn);
+            card.appendChild(badge);
+
+            card.addEventListener('mouseenter', () => {
+                overlay.style.background = 'rgba(0,0,0,0.35)';
+                overlay.querySelector('i').style.opacity = '1';
+                delBtn.style.opacity = '1';
+                badge.style.opacity = '1';
+            });
+            card.addEventListener('mouseleave', () => {
+                overlay.style.background = 'rgba(0,0,0,0)';
+                overlay.querySelector('i').style.opacity = '0';
+                delBtn.style.opacity = '0';
+                badge.style.opacity = '0';
+            });
+
+            card.addEventListener('click', () => viewDayImageFullscreen(images, index));
+            delBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteDayAnalysisImage(index); });
+
+            // Drag & drop reordering
+            card.addEventListener('dragstart', (e) => {
+                dragSrcIndex = index;
+                card.style.opacity = '0.35';
+                e.dataTransfer.effectAllowed = 'move';
+            });
+            card.addEventListener('dragend', () => {
+                card.style.opacity = '';
+                imagesView.querySelectorAll('[data-index]').forEach(el => {
+                    el.style.borderColor = '';
+                    el.style.borderWidth = '';
+                });
+            });
+            card.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                card.style.borderColor = 'var(--primary)';
+                card.style.borderWidth = '2px';
+            });
+            card.addEventListener('dragleave', () => {
+                card.style.borderColor = '';
+                card.style.borderWidth = '';
+            });
+            card.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                card.style.borderColor = '';
+                card.style.borderWidth = '';
+                if (dragSrcIndex === null || dragSrcIndex === index) return;
+
+                const modal = document.getElementById('day-analysis-modal');
+                const date = modal?.dataset.currentDate;
+                if (!date || !DB.dayAnalysisData?.[date]?.images) return;
+
+                const arr = DB.dayAnalysisData[date].images;
+                const [moved] = arr.splice(dragSrcIndex, 1);
+                arr.splice(index, 0, moved);
+                dragSrcIndex = null;
+
+                await dexieDB.generalData.put({ key: 'dayAnalysisData', data: DB.dayAnalysisData });
+                renderDayAnalysisImages(arr);
+            });
+
+            imagesView.appendChild(card);
+        });
     }
-    
-    window.viewImageFullscreen = function(src) {
-        const viewer = document.createElement('div');
-        viewer.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:10000;display:flex;align-items:center;justify-content:center;cursor:zoom-out;';
-        viewer.innerHTML = `<img src="${src}" style="max-width:90%;max-height:90%;object-fit:contain;">`;
-        viewer.onclick = () => viewer.remove();
-        document.body.appendChild(viewer);
+
+    // Visor fullscreen con navegación y teclado
+    window.viewDayImageFullscreen = function(images, startIndex) {
+        if (typeof images === 'string') { images = [images]; startIndex = 0; }
+        let current = startIndex || 0;
+
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.97);z-index:99999;display:flex;align-items:center;justify-content:center;';
+
+        function render() {
+            const src = images[current];
+            const hasPrev = current > 0;
+            const hasNext = current < images.length - 1;
+            overlay.innerHTML = `
+                <button id="fs-close" style="position:absolute;top:18px;right:18px;background:rgba(255,255,255,0.12);border:none;color:white;width:42px;height:42px;border-radius:50%;font-size:1.1rem;cursor:pointer;z-index:2;display:flex;align-items:center;justify-content:center;transition:background 0.2s;">
+                    <i class="fas fa-times"></i>
+                </button>
+                ${images.length > 1 ? `<div style="position:absolute;top:22px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,0.12);color:white;padding:5px 16px;border-radius:20px;font-size:0.82rem;">${current + 1} / ${images.length}</div>` : ''}
+                ${images.length > 1 ? `
+                <button id="fs-prev" style="position:absolute;left:18px;background:rgba(255,255,255,0.12);border:none;color:white;width:48px;height:48px;border-radius:50%;font-size:1.2rem;cursor:pointer;z-index:2;display:flex;align-items:center;justify-content:center;transition:background 0.2s;opacity:${hasPrev ? 1 : 0.2};pointer-events:${hasPrev ? 'auto' : 'none'};">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <button id="fs-next" style="position:absolute;right:18px;background:rgba(255,255,255,0.12);border:none;color:white;width:48px;height:48px;border-radius:50%;font-size:1.2rem;cursor:pointer;z-index:2;display:flex;align-items:center;justify-content:center;transition:background 0.2s;opacity:${hasNext ? 1 : 0.2};pointer-events:${hasNext ? 'auto' : 'none'};">
+                    <i class="fas fa-chevron-right"></i>
+                </button>` : ''}
+                <img src="${src}" style="max-width:calc(100vw - 140px);max-height:calc(100vh - 100px);object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.6);display:block;">
+                <div style="position:absolute;bottom:18px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.4);font-size:0.73rem;white-space:nowrap;">
+                    ${images.length > 1 ? '← → navegar · ' : ''}Esc para cerrar
+                </div>`;
+
+            const close = () => { overlay.remove(); document.body.style.overflow = ''; document.removeEventListener('keydown', keyHandler); };
+            overlay.querySelector('#fs-close').onclick = close;
+            overlay.querySelector('#fs-prev')?.addEventListener('click', (e) => { e.stopPropagation(); current--; render(); });
+            overlay.querySelector('#fs-next')?.addEventListener('click', (e) => { e.stopPropagation(); current++; render(); });
+            overlay.onclick = (e) => { if (e.target === overlay) close(); };
+        }
+
+        const keyHandler = (e) => {
+            if (e.key === 'Escape') { overlay.remove(); document.body.style.overflow = ''; document.removeEventListener('keydown', keyHandler); }
+            if (e.key === 'ArrowLeft'  && current > 0)                    { current--; render(); }
+            if (e.key === 'ArrowRight' && current < images.length - 1)    { current++; render(); }
+        };
+
+        document.addEventListener('keydown', keyHandler);
+        document.body.style.overflow = 'hidden';
+        document.body.appendChild(overlay);
+        render();
     };
+
+    // Compatibilidad con llamadas antiguas (src string)
+    window.viewImageFullscreen = (src) => viewDayImageFullscreen([src], 0);
     
     window.deleteDayAnalysisImage = async function(index) {
         if (!await showConfirm('¿Eliminar esta imagen?', { title: 'Eliminar imagen', confirmText: 'Eliminar', danger: true })) return;
@@ -62563,6 +62698,37 @@ document.addEventListener('DOMContentLoaded', function() {
         // Cerrar modal
         document.getElementById('close-day-analysis-modal')?.addEventListener('click', () => {
             document.getElementById('day-analysis-modal').style.display = 'none';
+        });
+
+        // ── Pegar imágenes con Ctrl+V ────────────────────────────────────────
+        document.getElementById('day-analysis-modal')?.addEventListener('paste', async (e) => {
+            const items = Array.from(e.clipboardData?.items || []);
+            const imageItems = items.filter(it => it.type.startsWith('image/'));
+            if (!imageItems.length) return;
+
+            e.preventDefault();
+            const modal = document.getElementById('day-analysis-modal');
+            const date = modal?.dataset.currentDate;
+            if (!date) return;
+
+            if (!DB.dayAnalysisData) DB.dayAnalysisData = {};
+            if (!DB.dayAnalysisData[date]) DB.dayAnalysisData[date] = {};
+            if (!DB.dayAnalysisData[date].images) DB.dayAnalysisData[date].images = [];
+
+            const newImages = await Promise.all(imageItems.map(item => new Promise((resolve) => {
+                const blob = item.getAsFile();
+                const reader = new FileReader();
+                reader.onload = (ev) => resolve(ev.target.result);
+                reader.readAsDataURL(blob);
+            })));
+
+            DB.dayAnalysisData[date].images.push(...newImages);
+            await dexieDB.generalData.put({ key: 'dayAnalysisData', data: DB.dayAnalysisData });
+            renderDayAnalysisImages(DB.dayAnalysisData[date].images);
+
+            // Cambiar automáticamente al tab de imágenes para que el usuario vea el resultado
+            switchDayAnalysisTab('images');
+            showNotification(`${newImages.length} imagen${newImages.length > 1 ? 'es pegadas' : ' pegada'} correctamente`, 'success');
         });
         
         // Tabs
