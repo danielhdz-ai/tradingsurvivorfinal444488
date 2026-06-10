@@ -452,7 +452,223 @@ CREATE POLICY "Users can delete own audiciones"
   ON public_audiciones FOR DELETE
   USING (auth.uid() = user_id);
 
+-- ============================================
+-- 11. TABLA DE CARPETAS DEL NOTEBOOK
+-- ============================================
+CREATE TABLE IF NOT EXISTS notebook_folders (
+  id TEXT PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  name TEXT NOT NULL,
+  icon TEXT DEFAULT '📁',
+  parent_id TEXT,
+  color TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notebook_folders_user ON notebook_folders(user_id);
+
+ALTER TABLE notebook_folders ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can manage own notebook folders" ON notebook_folders;
+CREATE POLICY "Users can manage own notebook folders"
+  ON notebook_folders FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+DROP TRIGGER IF EXISTS update_notebook_folders_updated_at ON notebook_folders;
+CREATE TRIGGER update_notebook_folders_updated_at BEFORE UPDATE ON notebook_folders
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================
+-- 12. TABLA DE NOTAS DEL NOTEBOOK
+-- ============================================
+CREATE TABLE IF NOT EXISTS notebook_notes (
+  id TEXT PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  folder_id TEXT REFERENCES notebook_folders(id) ON DELETE SET NULL,
+  title TEXT NOT NULL DEFAULT 'Sin título',
+  content TEXT DEFAULT '',
+  is_pinned BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notebook_notes_user ON notebook_notes(user_id);
+CREATE INDEX IF NOT EXISTS idx_notebook_notes_folder ON notebook_notes(user_id, folder_id);
+CREATE INDEX IF NOT EXISTS idx_notebook_notes_updated ON notebook_notes(user_id, updated_at DESC);
+
+ALTER TABLE notebook_notes ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can manage own notebook notes" ON notebook_notes;
+CREATE POLICY "Users can manage own notebook notes"
+  ON notebook_notes FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+DROP TRIGGER IF EXISTS update_notebook_notes_updated_at ON notebook_notes;
+CREATE TRIGGER update_notebook_notes_updated_at BEFORE UPDATE ON notebook_notes
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================
+-- 13. TABLA DE IMÁGENES DEL CHARTBOOK
+-- ============================================
+CREATE TABLE IF NOT EXISTS chartbook_images (
+  id TEXT PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  operation_id TEXT,
+  storage_url TEXT NOT NULL,
+  thumbnail_url TEXT,
+  file_name TEXT,
+  file_size INTEGER,
+  width INTEGER,
+  height INTEGER,
+  notes TEXT,
+  tags TEXT[],
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_chartbook_images_user ON chartbook_images(user_id);
+CREATE INDEX IF NOT EXISTS idx_chartbook_images_operation ON chartbook_images(user_id, operation_id);
+CREATE INDEX IF NOT EXISTS idx_chartbook_images_created ON chartbook_images(user_id, created_at DESC);
+
+ALTER TABLE chartbook_images ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can manage own chartbook images" ON chartbook_images;
+CREATE POLICY "Users can manage own chartbook images"
+  ON chartbook_images FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- ============================================
+-- 14. TABLA DE DAILY JOURNAL ENTRIES
+-- (contexto del día: emoción, sesgo, notas, imágenes)
+-- ============================================
+CREATE TABLE IF NOT EXISTS daily_journal_entries (
+  id TEXT PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  date TEXT NOT NULL,
+  account_id TEXT,
+  emotion TEXT,
+  bias TEXT,
+  session TEXT,
+  pre_market_notes TEXT,
+  post_market_notes TEXT,
+  analytics_notes TEXT,
+  images TEXT[],
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, date, account_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_daily_journal_user ON daily_journal_entries(user_id);
+CREATE INDEX IF NOT EXISTS idx_daily_journal_date ON daily_journal_entries(user_id, date DESC);
+
+ALTER TABLE daily_journal_entries ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can manage own journal entries" ON daily_journal_entries;
+CREATE POLICY "Users can manage own journal entries"
+  ON daily_journal_entries FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+DROP TRIGGER IF EXISTS update_daily_journal_entries_updated_at ON daily_journal_entries;
+CREATE TRIGGER update_daily_journal_entries_updated_at BEFORE UPDATE ON daily_journal_entries
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================
+-- 15. TABLA DE PERFILES PÚBLICOS DE USUARIO
+-- ============================================
+CREATE TABLE IF NOT EXISTS user_profiles (
+  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  display_name TEXT,
+  avatar_url TEXT,
+  bio TEXT,
+  twitter_handle TEXT,
+  is_public BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON user_profiles;
+CREATE POLICY "Public profiles are viewable by everyone"
+  ON user_profiles FOR SELECT
+  USING (is_public = true OR auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can manage own profile" ON user_profiles;
+CREATE POLICY "Users can manage own profile"
+  ON user_profiles FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+DROP TRIGGER IF EXISTS update_user_profiles_updated_at ON user_profiles;
+CREATE TRIGGER update_user_profiles_updated_at BEFORE UPDATE ON user_profiles
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================
+-- 16. TABLA DE KEEP-ALIVE (heartbeat de sesión)
+-- ============================================
+CREATE TABLE IF NOT EXISTS keep_alive (
+  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  last_seen TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE keep_alive ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can upsert own keep_alive" ON keep_alive;
+CREATE POLICY "Users can upsert own keep_alive"
+  ON keep_alive FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- ============================================
+-- STORAGE: buckets necesarios
+-- (ejecutar DESPUÉS de crear las tablas)
+-- ============================================
+-- trade-images: imágenes de operaciones y chartbook
+-- INSERT INTO storage.buckets (id, name, public) VALUES ('trade-images', 'trade-images', true) ON CONFLICT DO NOTHING;
+-- notebook-images: imágenes insertadas en notas del Notebook
+-- INSERT INTO storage.buckets (id, name, public) VALUES ('notebook-images', 'notebook-images', true) ON CONFLICT DO NOTHING;
+
+-- Política de acceso a bucket trade-images (RLS de Storage)
+-- CREATE POLICY "Authenticated users can upload trade images"
+--   ON storage.objects FOR INSERT
+--   TO authenticated
+--   WITH CHECK (bucket_id = 'trade-images' AND (storage.foldername(name))[1] = auth.uid()::text);
+-- CREATE POLICY "Anyone can view trade images"
+--   ON storage.objects FOR SELECT USING (bucket_id = 'trade-images');
+-- CREATE POLICY "Users can delete own trade images"
+--   ON storage.objects FOR DELETE
+--   TO authenticated
+--   USING (bucket_id = 'trade-images' AND (storage.foldername(name))[1] = auth.uid()::text);
+
+-- ============================================
+-- FUNCIÓN: crear perfil al registrarse
+-- ============================================
+CREATE OR REPLACE FUNCTION public.handle_new_user_profile()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.user_profiles (user_id, display_name, avatar_url)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
+    NEW.raw_user_meta_data->>'avatar_url'
+  )
+  ON CONFLICT (user_id) DO NOTHING;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created_profile ON auth.users;
+CREATE TRIGGER on_auth_user_created_profile
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user_profile();
+
+-- ============================================
 -- Para verificar que todo se creó correctamente:
+-- ============================================
 SELECT 
   tablename, 
   schemaname 

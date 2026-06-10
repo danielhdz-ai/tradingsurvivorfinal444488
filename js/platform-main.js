@@ -7,38 +7,53 @@
  * Retorna true si el usuario NO es PRO y debe ver el modal
  * Retorna false si el usuario es PRO o admin
  */
-const ADMIN_EMAILS = ['daniel.hdz.trader@gmail.com', 'danielhernandezhv3@gmail.com'];
+// ── Verificación de plan PRO ──────────────────────────────────────────────
+// Los admin emails viven ÚNICAMENTE en el servidor (/api/check-plan).
+// El cliente nunca expone emails ni lógica de bypass.
 
-function _applyAdminProAccess(user) {
-    if (!user?.email || !ADMIN_EMAILS.includes(user.email)) return;
-    window.userPlan = 'pro';
-    window.userSubscriptionStatus = 'active';
-    document.querySelectorAll('span').forEach(el => {
-        if (el.textContent.trim() === 'PRO') el.style.display = 'none';
-    });
-    const upgradeModal = document.getElementById('upgrade-modal');
-    if (upgradeModal) {
-        upgradeModal.style.display = 'none';
-        upgradeModal.remove();
+// Almacenamiento interno del plan: NO en window para dificultar tampering desde DevTools
+let _verifiedPlan = 'free';
+let _planVerifiedAt = 0;
+const _PLAN_CACHE_MS = 30 * 60 * 1000; // 30 minutos
+
+function _setPlan(plan) {
+    _verifiedPlan = plan === 'pro' || plan === 'premium' ? plan : 'free';
+    _planVerifiedAt = Date.now();
+    // Mantener window.userPlan por compatibilidad con código existente,
+    // pero de solo lectura para impedir asignación directa desde consola
+    try {
+        Object.defineProperty(window, 'userPlan', {
+            get: () => _verifiedPlan,
+            set: () => { console.warn('⚠️ window.userPlan es de solo lectura.'); },
+            configurable: true
+        });
+    } catch (_) {
+        window.userPlan = _verifiedPlan;
     }
-    console.log('👑 Acceso PRO admin aplicado:', user.email);
 }
 
+// Llamada al endpoint seguro del servidor para verificar el plan
+async function _fetchPlanFromServer() {
+    try {
+        const session = await window.supabase?.auth?.getSession?.();
+        const token = session?.data?.session?.access_token;
+        if (!token) return 'free';
+
+        const res = await fetch('/api/check-plan', {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) return 'free';
+        const json = await res.json();
+        return json.plan || 'free';
+    } catch {
+        return 'free';
+    }
+}
+
+function _applyAdminProAccess() { /* legacy — no-op, la verificación es server-side */ }
+
 function shouldShowUpgradeModal() {
-    // PRIMERA VERIFICACIÓN: Email de admin
-    if (window.currentUser && ADMIN_EMAILS.includes(window.currentUser.email)) {
-        console.log('🚫 [PRO Modal] Bloqueado para admin:', window.currentUser.email);
-        return false;
-    }
-    
-    // SEGUNDA VERIFICACIÓN: Plan PRO verificado
-    if (window.userPlan === 'pro') {
-        console.log('✅ [PRO Modal] Usuario tiene plan PRO');
-        return false;
-    }
-    
-    // Si no es admin ni PRO, permitir mostrar modal
-    console.log('⚠️ [PRO Modal] Usuario free - modal permitido');
+    if (_verifiedPlan === 'pro' || _verifiedPlan === 'premium') return false;
     return true;
 }
 
@@ -40452,55 +40467,34 @@ function stopAutoSync() {
 // Verificar si el usuario tiene suscripción activa
 async function checkUserSubscription(userId) {
     try {
-        // El administrador siempre tiene plan PRO sin necesidad de suscripción
-        const { data: { user: currentAuthUser } } = await supabase.auth.getUser();
-        if (currentAuthUser && ADMIN_EMAILS.includes(currentAuthUser.email)) {
-            window.userPlan = 'pro';
-            window.userSubscriptionStatus = 'active';
-            console.log('👑 Plan del usuario: PRO (administrador)');
-            
-            // Ocultar los badges PRO del sidebar para el admin
+        // Usar caché si la verificación es reciente
+        if (_verifiedPlan !== 'free' && Date.now() - _planVerifiedAt < _PLAN_CACHE_MS) {
+            console.log(`📋 Plan (caché): ${_verifiedPlan}`);
+            return { plan: _verifiedPlan, status: 'active', isActive: true };
+        }
+
+        // Verificar plan en el servidor (incluye admin check sin exponer emails)
+        const plan = await _fetchPlanFromServer();
+        _setPlan(plan);
+
+        const isActive = plan === 'pro' || plan === 'premium';
+        window.userSubscriptionStatus = isActive ? 'active' : 'free';
+
+        console.log(`📋 Plan del usuario (servidor): ${_verifiedPlan}`);
+
+        if (isActive) {
+            // Ocultar badges PRO del sidebar para usuarios PRO/admin
             document.querySelectorAll('span').forEach(el => {
                 if (el.textContent.trim() === 'PRO') el.style.display = 'none';
             });
-            
-            // FORZAR ocultación del modal PRO para admins
             const upgradeModal = document.getElementById('upgrade-modal');
-            if (upgradeModal) {
-                upgradeModal.style.display = 'none';
-                upgradeModal.remove(); // Eliminarlo completamente del DOM
-                console.log('✅ Modal PRO eliminado del DOM para admin');
-            }
-            
-            return { plan: 'pro', status: 'active', isActive: true };
+            if (upgradeModal) { upgradeModal.style.display = 'none'; upgradeModal.remove(); }
         }
 
-        const { data, error } = await supabase
-            .from('subscriptions')
-            .select('plan, status, current_period_end')
-            .eq('user_id', userId)
-            .single();
-
-        if (error || !data) {
-            // Sin registro en subscriptions → plan free (creado por trigger de Supabase)
-            window.userPlan = 'free';
-            window.userSubscriptionStatus = 'free';
-            console.log('📋 Plan del usuario: free (sin suscripción)'); 
-            return { plan: 'free', status: 'free', isActive: false };
-        }
-
-        const isExpired = data.current_period_end && new Date(data.current_period_end) < new Date();
-        const isActive = data.status === 'active' && !isExpired;
-
-        window.userPlan = isActive ? data.plan : 'free';
-        window.userSubscriptionStatus = data.status;
-        window.userPlanExpiry = data.current_period_end;
-
-        console.log(`📋 Plan del usuario: ${window.userPlan} | Estado: ${data.status} | Expira: ${data.current_period_end || 'N/A'}`);
-        return { plan: data.plan, status: data.status, isActive };
+        return { plan: _verifiedPlan, status: window.userSubscriptionStatus, isActive };
     } catch (err) {
         console.warn('⚠️ No se pudo verificar suscripción:', err.message);
-        window.userPlan = 'free';
+        _setPlan('free');
         return { plan: 'free', status: 'unknown', isActive: false };
     }
 }
@@ -41829,9 +41823,12 @@ async function loadRecentOperationsQuick() {
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         console.log('⚡ [loadRecentOperationsQuick] Cargando últimos 7 días...');
+        // Excluir image_datas del query principal → reduce egress drásticamente
+        // Las imágenes se cargan de forma lazy cuando el usuario abre el detalle
+        const OPS_COLS = 'id,account_id,date,instrument,type,entry,exit,entry_time,exit_time,volume,result,pl,currency,notes,session,platform,order_id,commission,manual_pl,created_at,updated_at';
         const { data, error } = await client
             .from('operations')
-            .select('*')
+            .select(OPS_COLS)
             .eq('user_id', currentUser.id)
             .order('date', { ascending: false })
             .limit(100);
@@ -42016,9 +42013,11 @@ async function loadOperationsFromSupabase() {
             return [];
         }
 
+        // Excluir image_datas → las imágenes se cargan lazy al abrir cada operación
+        const OPS_COLS = 'id,account_id,date,instrument,type,entry,exit,entry_time,exit_time,volume,result,pl,currency,notes,session,platform,order_id,commission,manual_pl,created_at,updated_at';
         const { data, error } = await client
             .from('operations')
-            .select('*')
+            .select(OPS_COLS)
             .eq('user_id', currentUser.id)
             .order('date', { ascending: false })
             .limit(2000);
@@ -62654,18 +62653,36 @@ document.addEventListener('DOMContentLoaded', function() {
     window.viewImageFullscreen = (src) => viewDayImageFullscreen([src], 0);
 
     // Función global: insertar imagen (File) en cualquier editor contenteditable
-    window.insertImgIntoEditor = function(file, editorEl) {
+    // Sube un File a Supabase Storage y devuelve la URL pública
+    async function _uploadFileToStorage(file, bucket) {
+        try {
+            if (!window.supabase || !window.currentUser) return null;
+            const ext = (file.name || 'img').split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+            const path = `${window.currentUser.id}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
+            const { error } = await window.supabase.storage
+                .from(bucket)
+                .upload(path, file, { cacheControl: '31536000', upsert: false });
+            if (error) return null;
+            const { data: { publicUrl } } = window.supabase.storage.from(bucket).getPublicUrl(path);
+            return publicUrl || null;
+        } catch { return null; }
+    }
+
+    // Inserta un File como <img> en un editor contenteditable.
+    // Muestra base64 de inmediato y sube a Storage en background → reemplaza src con URL pública
+    window.insertImgIntoEditor = function(file, editorEl, bucket) {
+        bucket = bucket || 'notebook-images';
         return new Promise(resolve => {
             if (!editorEl) return resolve();
             const reader = new FileReader();
-            reader.onload = (ev) => {
+            reader.onload = async (ev) => {
                 const wrapper = document.createElement('div');
                 wrapper.setAttribute('contenteditable', 'false');
                 wrapper.style.cssText = 'display:inline-block;position:relative;max-width:100%;margin:8px 4px;vertical-align:top;';
                 wrapper.draggable = true;
 
                 const img = document.createElement('img');
-                img.src = ev.target.result;
+                img.src = ev.target.result; // base64 instantáneo
                 img.style.cssText = 'max-width:100%;height:auto;border-radius:6px;display:block;cursor:zoom-in;';
                 img.title = 'Click para pantalla completa';
 
@@ -62705,13 +62722,21 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (!dw || dw === wrapper) return;
                     e.preventDefault();
                     editorEl._draggingWrapper = null;
-                    // Insertar antes del wrapper destino
                     editorEl.insertBefore(dw, wrapper);
                 });
 
                 editorEl.appendChild(wrapper);
                 editorEl.focus();
-                resolve();
+                resolve(); // Resuelve al instante con base64
+
+                // Subir a Storage en background sin bloquear la UI
+                _uploadFileToStorage(file, bucket).then(url => {
+                    if (url) {
+                        img.src = url;
+                        img.dataset.storageUrl = url;
+                        console.log('✅ [insertImgIntoEditor] Imagen subida a Storage:', url);
+                    }
+                });
             };
             reader.readAsDataURL(file);
         });
@@ -67443,6 +67468,37 @@ document.addEventListener('DOMContentLoaded', function() {
         async function loadAllNotes() {
             try {
                 console.log('📋 Cargando TODAS las notas en memoria...');
+
+                // Sincronizar desde Supabase si hay conexión
+                if (window.supabase && window.userId) {
+                    try {
+                        const { data: remoteNotes, error } = await supabase
+                            .from('notebook_notes')
+                            .select('*')
+                            .eq('user_id', userId)
+                            .order('updated_at', { ascending: false });
+
+                        if (!error && remoteNotes && remoteNotes.length > 0) {
+                            const localNotes = await dexieDB.notebookNotes.toArray();
+                            const localMap = {};
+                            localNotes.forEach(n => { localMap[String(n.id)] = n; });
+
+                            let synced = 0;
+                            for (const remote of remoteNotes) {
+                                const local = localMap[String(remote.id)];
+                                // Ganar la versión más reciente
+                                if (!local || new Date(remote.updated_at) > new Date(local.updated_at)) {
+                                    await dexieDB.notebookNotes.put(remote);
+                                    synced++;
+                                }
+                            }
+                            if (synced > 0) console.log(`🔄 [Notebook] ${synced} notas sincronizadas desde Supabase`);
+                        }
+                    } catch (syncErr) {
+                        console.warn('⚠️ [Notebook] Error sincronizando notas desde Supabase:', syncErr.message);
+                    }
+                }
+
                 const allNotes = await dexieDB.notebookNotes.toArray();
                 DB.notebookNotes = allNotes;
                 console.log(`✅ ${allNotes.length} notas cargadas en DB.notebookNotes`);
