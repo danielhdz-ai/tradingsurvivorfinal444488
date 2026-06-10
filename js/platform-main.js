@@ -62569,8 +62569,24 @@ document.addEventListener('DOMContentLoaded', function() {
         if (typeof images === 'string') { images = [images]; startIndex = 0; }
         let current = startIndex || 0;
 
+        // Usar el z-index máximo posible y 100vw/100vh para tapar sidebar y cualquier otro elemento
         const overlay = document.createElement('div');
-        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.97);z-index:99999;display:flex;align-items:center;justify-content:center;';
+        overlay.style.cssText = [
+            'position:fixed',
+            'top:0', 'left:0',
+            'width:100vw', 'height:100vh',
+            'background:rgba(0,0,0,0.97)',
+            'z-index:2147483647',
+            'display:flex',
+            'align-items:center',
+            'justify-content:center',
+        ].join(';');
+
+        const close = () => {
+            overlay.remove();
+            document.body.style.overflow = '';
+            document.removeEventListener('keydown', keyHandler);
+        };
 
         function render() {
             const src = images[current];
@@ -62582,28 +62598,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 </button>
                 ${images.length > 1 ? `<div style="position:absolute;top:22px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,0.12);color:white;padding:5px 16px;border-radius:20px;font-size:0.82rem;">${current + 1} / ${images.length}</div>` : ''}
                 ${images.length > 1 ? `
-                <button id="fs-prev" style="position:absolute;left:18px;background:rgba(255,255,255,0.12);border:none;color:white;width:48px;height:48px;border-radius:50%;font-size:1.2rem;cursor:pointer;z-index:2;display:flex;align-items:center;justify-content:center;transition:background 0.2s;opacity:${hasPrev ? 1 : 0.2};pointer-events:${hasPrev ? 'auto' : 'none'};">
+                <button id="fs-prev" style="position:absolute;left:18px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.12);border:none;color:white;width:48px;height:48px;border-radius:50%;font-size:1.2rem;cursor:pointer;z-index:2;display:flex;align-items:center;justify-content:center;transition:background 0.2s;opacity:${hasPrev ? 1 : 0.2};pointer-events:${hasPrev ? 'auto' : 'none'};">
                     <i class="fas fa-chevron-left"></i>
                 </button>
-                <button id="fs-next" style="position:absolute;right:18px;background:rgba(255,255,255,0.12);border:none;color:white;width:48px;height:48px;border-radius:50%;font-size:1.2rem;cursor:pointer;z-index:2;display:flex;align-items:center;justify-content:center;transition:background 0.2s;opacity:${hasNext ? 1 : 0.2};pointer-events:${hasNext ? 'auto' : 'none'};">
+                <button id="fs-next" style="position:absolute;right:18px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.12);border:none;color:white;width:48px;height:48px;border-radius:50%;font-size:1.2rem;cursor:pointer;z-index:2;display:flex;align-items:center;justify-content:center;transition:background 0.2s;opacity:${hasNext ? 1 : 0.2};pointer-events:${hasNext ? 'auto' : 'none'};">
                     <i class="fas fa-chevron-right"></i>
                 </button>` : ''}
-                <img src="${src}" style="max-width:calc(100vw - 140px);max-height:calc(100vh - 100px);object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.6);display:block;">
-                <div style="position:absolute;bottom:18px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.4);font-size:0.73rem;white-space:nowrap;">
-                    ${images.length > 1 ? '← → navegar · ' : ''}Esc para cerrar
+                <img src="${src}" style="max-width:calc(100vw - 120px);max-height:calc(100vh - 80px);object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.6);display:block;cursor:default;">
+                <div style="position:absolute;bottom:16px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.4);font-size:0.73rem;white-space:nowrap;">
+                    ${images.length > 1 ? '← → navegar · ' : ''}Esc para cerrar · Clic fuera para cerrar
                 </div>`;
 
-            const close = () => { overlay.remove(); document.body.style.overflow = ''; document.removeEventListener('keydown', keyHandler); };
             overlay.querySelector('#fs-close').onclick = close;
             overlay.querySelector('#fs-prev')?.addEventListener('click', (e) => { e.stopPropagation(); current--; render(); });
             overlay.querySelector('#fs-next')?.addEventListener('click', (e) => { e.stopPropagation(); current++; render(); });
-            overlay.onclick = (e) => { if (e.target === overlay) close(); };
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); }, { once: true });
         }
 
         const keyHandler = (e) => {
-            if (e.key === 'Escape') { overlay.remove(); document.body.style.overflow = ''; document.removeEventListener('keydown', keyHandler); }
-            if (e.key === 'ArrowLeft'  && current > 0)                    { current--; render(); }
-            if (e.key === 'ArrowRight' && current < images.length - 1)    { current++; render(); }
+            if (e.key === 'Escape') close();
+            if (e.key === 'ArrowLeft'  && current > 0)                 { current--; render(); }
+            if (e.key === 'ArrowRight' && current < images.length - 1) { current++; render(); }
         };
 
         document.addEventListener('keydown', keyHandler);
@@ -67990,59 +68005,63 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Pantalla completa para el editor de notas
     let _notebookFsPlaceholder = null;
+
+    function exitNotebookFullscreen() {
+        const editorContainer = document.getElementById('note-editor-container');
+        const fullscreenBtn = document.getElementById('fullscreen-note-btn');
+        const noteContent = document.getElementById('note-content');
+        if (!editorContainer || !editorContainer.classList.contains('fullscreen-note')) return;
+
+        if (_notebookFsPlaceholder && _notebookFsPlaceholder.parentNode) {
+            _notebookFsPlaceholder.parentNode.insertBefore(editorContainer, _notebookFsPlaceholder);
+            _notebookFsPlaceholder.remove();
+            _notebookFsPlaceholder = null;
+        }
+        editorContainer.classList.remove('fullscreen-note');
+        if (fullscreenBtn) { fullscreenBtn.innerHTML = '<i class="fas fa-expand"></i>'; fullscreenBtn.title = 'Pantalla completa'; }
+        editorContainer.style.cssText = '';
+        document.body.style.overflow = '';
+        if (noteContent) noteContent.style.cssText = 'flex: 1; padding: 1.5rem; overflow-y: auto; min-height: 500px; max-height: calc(100vh - 400px);';
+        document.removeEventListener('keydown', _notebookFsEsc);
+    }
+
+    function _notebookFsEsc(e) { if (e.key === 'Escape') exitNotebookFullscreen(); }
+
     function toggleFullscreen() {
         const editorContainer = document.getElementById('note-editor-container');
         const fullscreenBtn = document.getElementById('fullscreen-note-btn');
         const noteContent = document.getElementById('note-content');
+        if (!editorContainer) return;
 
         if (!editorContainer.classList.contains('fullscreen-note')) {
-            // Mover el editor a document.body para evitar stacking context del section-container
+            // Mover a body para escapar cualquier stacking context
             _notebookFsPlaceholder = document.createElement('div');
             _notebookFsPlaceholder.id = 'note-editor-fs-placeholder';
             editorContainer.parentNode.insertBefore(_notebookFsPlaceholder, editorContainer);
             document.body.appendChild(editorContainer);
 
             editorContainer.classList.add('fullscreen-note');
-            fullscreenBtn.innerHTML = '<i class="fas fa-compress"></i>';
-            fullscreenBtn.title = 'Salir de pantalla completa';
+            if (fullscreenBtn) { fullscreenBtn.innerHTML = '<i class="fas fa-compress"></i>'; fullscreenBtn.title = 'Salir de pantalla completa'; }
 
             const isLight = document.body.classList.contains('light-mode');
-            editorContainer.style.cssText = `
-                position: fixed !important;
-                top: 0 !important;
-                left: 0 !important;
-                right: 0 !important;
-                bottom: 0 !important;
-                width: 100vw !important;
-                height: 100vh !important;
-                z-index: 99999 !important;
-                background-color: ${isLight ? '#FFFFFF' : '#0f0f0f'} !important;
-                color: ${isLight ? '#111827' : '#ffffff'} !important;
-                display: flex !important;
-                flex-direction: column !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                overflow: hidden !important;
-            `;
-            noteContent.style.cssText = `
-                flex: 1 1 auto !important;
-                overflow-y: auto !important;
-                max-height: none !important;
-                height: auto !important;
-                padding: 2rem !important;
-            `;
+            editorContainer.style.cssText = [
+                'position:fixed', 'top:0', 'left:0', 'right:0', 'bottom:0',
+                'width:100vw', 'height:100vh',
+                'z-index:2147483646',
+                `background-color:${isLight ? '#FFFFFF' : '#0f0f0f'}`,
+                `color:${isLight ? '#111827' : '#ffffff'}`,
+                'display:flex', 'flex-direction:column',
+                'margin:0', 'padding:0', 'overflow:hidden',
+            ].join('!important;') + '!important;';
+
+            if (noteContent) noteContent.style.cssText = [
+                'flex:1 1 auto', 'overflow-y:auto', 'max-height:none', 'height:auto', 'padding:2rem',
+            ].join('!important;') + '!important;';
+
+            document.body.style.overflow = 'hidden';
+            document.addEventListener('keydown', _notebookFsEsc);
         } else {
-            // Restaurar: devolver al placeholder
-            if (_notebookFsPlaceholder) {
-                _notebookFsPlaceholder.parentNode.insertBefore(editorContainer, _notebookFsPlaceholder);
-                _notebookFsPlaceholder.remove();
-                _notebookFsPlaceholder = null;
-            }
-            editorContainer.classList.remove('fullscreen-note');
-            fullscreenBtn.innerHTML = '<i class="fas fa-expand"></i>';
-            fullscreenBtn.title = 'Pantalla completa';
-            editorContainer.style.cssText = '';
-            noteContent.style.cssText = 'flex: 1; padding: 1.5rem; overflow-y: auto; min-height: 500px; max-height: calc(100vh - 400px);';
+            exitNotebookFullscreen();
         }
     }
 
