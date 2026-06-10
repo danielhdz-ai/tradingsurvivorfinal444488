@@ -15,7 +15,8 @@
     <link rel="icon" href="logos/trader-survivor-logo.svg" type="image/svg+xml">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-    <script type="importmap">{ "imports": { "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2" } }</script>
+    <!-- Supabase UMD (evita problemas con esm.sh y módulos ES) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
     <style>
         :root {
             --primary: #39ff14;
@@ -1115,25 +1116,32 @@
     <!-- STRIPE JS (cargar dinámicamente) -->
     <script src="https://js.stripe.com/v3/"></script>
 
-    <script type="module">
-        import { createClient } from '@supabase/supabase-js';
+    <script>
+        (async function initPaymentAuth() {
+            try {
+                const { createClient } = window.supabase || supabase;
+                const sb = createClient(
+                    'https://gakiamardmlgftfrlxkm.supabase.co',
+                    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdha2lhbWFyZG1sZ2Z0ZnJseGttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwMjczMzUsImV4cCI6MjA2ODYwMzMzNX0.wR3c9DMtSXzoagFDJdrmYqnN6vjfQMn8ijtUdOSpmYM'
+                );
 
-        const supabase = createClient(
-            'https://gakiamardmlgftfrlxkm.supabase.co',
-            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdha2lhbWFyZG1sZ2Z0ZnJseGttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwMjczMzUsImV4cCI6MjA2ODYwMzMzNX0.wR3c9DMtSXzoagFDJdrmYqnN6vjfQMn8ijtUdOSpmYM'
-        );
-
-        // Check session
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-            document.getElementById('navEmail').textContent = session.user.email;
-            window._userEmail   = session.user.email;
-            window._userId      = session.user.id;
-            window._accessToken = session.access_token;
-        } else {
-            // Not logged in — redirect to register
-            window.location.href = 'register.html';
-        }
+                const { data: { session } } = await sb.auth.getSession();
+                if (session?.user) {
+                    const emailEl = document.getElementById('navEmail');
+                    if (emailEl) emailEl.textContent = session.user.email;
+                    window._userEmail   = session.user.email;
+                    window._userId      = session.user.id;
+                    window._accessToken = session.access_token;
+                } else {
+                    // Sin sesión → volver al login
+                    window.location.href = '/login';
+                    return;
+                }
+            } catch (err) {
+                console.error('[payment] Error iniciando sesión:', err);
+                window.location.href = '/login';
+                return;
+            }
 
         // ── Init Stripe ──────────────────────────────────────
         // Coloca aquí tu Stripe PUBLISHABLE Key (empieza con pk_live_ o pk_test_)
@@ -1302,6 +1310,8 @@
             el.className = `msg ${type} show`;
             el.innerHTML = `<i class="fas fa-${type === 'error' ? 'exclamation-circle' : 'check-circle'}"></i> ${text}`;
         }
+
+        })(); // fin initPaymentAuth
     </script>
 
     <script>

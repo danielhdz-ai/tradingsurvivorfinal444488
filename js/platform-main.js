@@ -34234,15 +34234,16 @@ if (typeof MutationObserver !== 'undefined') {
                 console.log('✅ Email actualizado:', currentUser.email);
             }
             
-            // Actualizar avatar con foto de perfil desde localStorage
+            // Actualizar avatar: prioridad → foto personalizada en localStorage → avatar Google/OAuth → inicial
             if (headerAvatar) {
                 const profileImage = localStorage.getItem('profile-image');
+                const googleAvatar = currentUser?.user_metadata?.avatar_url || currentUser?.user_metadata?.picture;
                 if (profileImage) {
-                    headerAvatar.innerHTML = `<img src="${profileImage}" alt="Profile" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
-                    console.log('✅ Avatar actualizado con foto de perfil');
+                    headerAvatar.innerHTML = `<img src="${profileImage}" alt="Profile" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+                } else if (googleAvatar) {
+                    headerAvatar.innerHTML = `<img src="${googleAvatar}" alt="Profile" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" referrerpolicy="no-referrer">`;
                 } else if (currentUser.email) {
                     headerAvatar.textContent = currentUser.email.charAt(0).toUpperCase();
-                    console.log('✅ Avatar actualizado con inicial:', currentUser.email.charAt(0).toUpperCase());
                 }
             }
         };
@@ -40523,9 +40524,33 @@ async function _onUserLoginImpl(user) {
     currentUser = user;
     window.currentUser = user;
     isAutoSyncEnabled = true;
-    _applyAdminProAccess(user);
 
     console.log('🔐 Usuario autenticado en onUserLogin:', user.email);
+
+    // ── Guardia de aislamiento de datos entre usuarios ────────────────────
+    // Si cambia el user_id (p.ej. sesión de otra cuenta), limpiar Dexie completo
+    // para que el nuevo usuario nunca vea datos del anterior.
+    const _lastUserId = localStorage.getItem('_lastUserId');
+    if (_lastUserId && _lastUserId !== user.id) {
+        console.warn('⚠️ [Aislamiento] Usuario diferente detectado — limpiando caché local...');
+        await Promise.all([
+            dexieDB.operations.clear(),
+            dexieDB.accounts.clear(),
+            dexieDB.finances.clear(),
+            dexieDB.fundedAccounts.clear().catch(() => {}),
+            dexieDB.fundedHistory.clear().catch(() => {}),
+            dexieDB.setups.clear().catch(() => {}),
+            dexieDB.notebookNotes.clear().catch(() => {}),
+            dexieDB.notebookFolders.clear().catch(() => {}),
+            dexieDB.generalData.clear().catch(() => {})
+        ]).catch(() => {});
+        // También limpiar foto/username del usuario anterior
+        localStorage.removeItem('profile-image');
+        localStorage.removeItem('username');
+        localStorage.removeItem('defaultAccount');
+        console.log('✅ [Aislamiento] Caché limpiado para nuevo usuario');
+    }
+    localStorage.setItem('_lastUserId', user.id);
 
     // ── Fase 0: caché local instantáneo (Dexie) ──────────────────────────
     // Mostrar datos del caché local antes de cualquier petición a red.
@@ -41098,23 +41123,45 @@ function onUserLogout() {
     stopAutoSync();
     isAutoSyncEnabled = false;
     currentUser = null;
-    window.currentUser = null; // Limpiar referencia global
+    window.currentUser = null;
 
-    // SECURITY FIX: Limpiar credenciales de API de la caché local al cerrar sesión
-    // evita que un usuario nuevo vea las credenciales del usuario anterior
-    const emptyApiKeys = { ctrader: {}, bingx: {}, bitget: {}, mexc: {} };
+    // Limpiar TODOS los datos de usuario de localStorage
+    const userLocalStorageKeys = [
+        'profile-image', 'username', 'defaultAccount',
+        'bingx-api-key', 'bingx-secret-key', 'bingx-account-id',
+        '_lastUserId'
+    ];
+    userLocalStorageKeys.forEach(k => localStorage.removeItem(k));
+
+    // Limpiar DB en memoria
     if (typeof DB !== 'undefined') {
-        DB.apiKeys = emptyApiKeys;
+        DB.operations = [];
+        DB.accounts = [];
+        DB.finances = [];
+        DB.fundedAccounts = [];
+        DB.fundedHistory = [];
+        DB.setups = [];
+        DB.notebookNotes = [];
+        DB.notebookFolders = [];
+        DB.apiKeys = { ctrader: {}, bingx: {}, bitget: {}, mexc: {} };
     }
-    if (typeof dexieDB !== 'undefined') {
-        dexieDB.generalData.delete('apiKeys').catch(() => {});
-    }
-    // Limpiar claves residuales de localStorage (migración legada)
-    localStorage.removeItem('bingx-api-key');
-    localStorage.removeItem('bingx-secret-key');
-    localStorage.removeItem('bingx-account-id');
 
-    console.log('👋 Usuario desconectado - credenciales y sincronización limpiadas');
+    // Limpiar Dexie completo para que el próximo usuario no vea datos anteriores
+    if (typeof dexieDB !== 'undefined') {
+        Promise.all([
+            dexieDB.operations.clear(),
+            dexieDB.accounts.clear(),
+            dexieDB.finances.clear(),
+            dexieDB.fundedAccounts.clear().catch(() => {}),
+            dexieDB.fundedHistory.clear().catch(() => {}),
+            dexieDB.setups.clear().catch(() => {}),
+            dexieDB.notebookNotes.clear().catch(() => {}),
+            dexieDB.notebookFolders.clear().catch(() => {}),
+            dexieDB.generalData.clear().catch(() => {})
+        ]).catch(() => {});
+    }
+
+    console.log('👋 Sesión cerrada — datos locales limpiados');
     if (typeof Sentry !== 'undefined') Sentry.setUser(null);
 }
 
