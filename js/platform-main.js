@@ -9583,45 +9583,44 @@ if (typeof MutationObserver !== 'undefined') {
             const analyticsImagesBtn = document.getElementById('analytics-detail-images-btn');
             const analyticsEditor = document.getElementById('analytics-detail-notes-editor');
 
-            // Botón "Imágenes Adjuntas" → abre file picker → inserta en el editor
+            // Botón "Imágenes Adjuntas" → file picker adjunto al DOM → inserta al final del editor
             if (analyticsImagesBtn) {
                 analyticsImagesBtn.addEventListener('click', () => {
                     const picker = document.createElement('input');
                     picker.type = 'file';
                     picker.accept = 'image/*';
                     picker.multiple = true;
-                    picker.onchange = async () => {
-                        for (const file of picker.files) {
-                            await insertImgIntoAnalyticsEditor(file);
+                    picker.style.display = 'none';
+                    document.body.appendChild(picker);
+                    picker.addEventListener('change', async () => {
+                        for (const file of Array.from(picker.files)) {
+                            await insertImgIntoEditor(
+                                file,
+                                document.getElementById('analytics-detail-notes-editor')
+                            );
                         }
-                    };
+                        updateCharCountAnalytics();
+                        picker.remove();
+                    });
+                    picker.addEventListener('cancel', () => picker.remove());
                     picker.click();
                 });
             }
 
-            // Click en <img> dentro del editor → pantalla completa
+            // Mousedown en <img> dentro del editor → pantalla completa si no se arrastra
             if (analyticsEditor) {
-                analyticsEditor.addEventListener('click', (e) => {
-                    if (e.target.tagName === 'IMG') {
-                        window.viewImageFullscreen(e.target.src);
-                    }
-                });
-            }
-
-            async function insertImgIntoAnalyticsEditor(file) {
-                return new Promise(resolve => {
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                        const editor = document.getElementById('analytics-detail-notes-editor');
-                        if (!editor) return resolve();
-                        editor.focus();
-                        document.execCommand('insertHTML', false,
-                            `<img src="${ev.target.result}" style="max-width:100%;height:auto;margin:8px 0;border-radius:6px;cursor:pointer;" />`
-                        );
-                        updateCharCountAnalytics();
-                        resolve();
+                analyticsEditor.addEventListener('mousedown', (e) => {
+                    if (e.target.tagName !== 'IMG') return;
+                    const src = e.target.src;
+                    const sx = e.clientX, sy = e.clientY;
+                    const onUp = (ue) => {
+                        document.removeEventListener('mouseup', onUp);
+                        if (Math.abs(ue.clientX - sx) < 6 && Math.abs(ue.clientY - sy) < 6) {
+                            e.preventDefault();
+                            window.viewImageFullscreen(src);
+                        }
                     };
-                    reader.readAsDataURL(file);
+                    document.addEventListener('mouseup', onUp);
                 });
             }
 
@@ -62615,6 +62614,72 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Compatibilidad con llamadas antiguas (src string)
     window.viewImageFullscreen = (src) => viewDayImageFullscreen([src], 0);
+
+    // Función global: insertar imagen (File) en cualquier editor contenteditable
+    window.insertImgIntoEditor = function(file, editorEl) {
+        return new Promise(resolve => {
+            if (!editorEl) return resolve();
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const wrapper = document.createElement('div');
+                wrapper.setAttribute('contenteditable', 'false');
+                wrapper.style.cssText = 'display:inline-block;position:relative;max-width:100%;margin:8px 4px;vertical-align:top;';
+                wrapper.draggable = true;
+
+                const img = document.createElement('img');
+                img.src = ev.target.result;
+                img.style.cssText = 'max-width:100%;height:auto;border-radius:6px;display:block;cursor:zoom-in;';
+                img.title = 'Click para pantalla completa';
+
+                // Botones flotantes (visible al hover)
+                const btns = document.createElement('div');
+                btns.style.cssText = 'position:absolute;top:6px;right:6px;display:flex;gap:4px;opacity:0;transition:opacity 0.2s;pointer-events:none;';
+
+                const expandBtn = document.createElement('button');
+                expandBtn.type = 'button';
+                expandBtn.innerHTML = '<i class="fas fa-expand"></i>';
+                expandBtn.title = 'Pantalla completa';
+                expandBtn.style.cssText = 'pointer-events:all;background:rgba(0,0,0,0.75);color:#fff;border:none;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:0.7rem;display:flex;align-items:center;justify-content:center;';
+                expandBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); window.viewImageFullscreen(img.src); });
+
+                btns.appendChild(expandBtn);
+                wrapper.appendChild(img);
+                wrapper.appendChild(btns);
+
+                wrapper.addEventListener('mouseenter', () => { btns.style.opacity = '1'; btns.style.pointerEvents = 'all'; });
+                wrapper.addEventListener('mouseleave', () => { btns.style.opacity = '0'; btns.style.pointerEvents = 'none'; });
+                img.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); window.viewImageFullscreen(img.src); });
+
+                // Drag-to-reorder dentro del mismo editor
+                wrapper.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', 'img-wrapper');
+                    wrapper.style.opacity = '0.4';
+                    editorEl._draggingWrapper = wrapper;
+                });
+                wrapper.addEventListener('dragend', () => { wrapper.style.opacity = '1'; });
+                editorEl.addEventListener('dragover', (e) => {
+                    if (!editorEl._draggingWrapper) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                }, { passive: false });
+                editorEl.addEventListener('drop', (e) => {
+                    const dw = editorEl._draggingWrapper;
+                    if (!dw || dw === wrapper) return;
+                    e.preventDefault();
+                    editorEl._draggingWrapper = null;
+                    // Insertar antes del wrapper destino
+                    editorEl.insertBefore(dw, wrapper);
+                });
+
+                editorEl.appendChild(wrapper);
+                editorEl.focus();
+                resolve();
+            };
+            reader.readAsDataURL(file);
+        });
+    };
+    // Alias corto
+    var insertImgIntoEditor = window.insertImgIntoEditor;
     
     window.deleteDayAnalysisImage = async function(index) {
         if (!await showConfirm('¿Eliminar esta imagen?', { title: 'Eliminar imagen', confirmText: 'Eliminar', danger: true })) return;
@@ -67983,19 +68048,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Insertar imagen
     async function insertImage(file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const img = document.createElement('img');
-            img.src = e.target.result;
-            img.style.maxWidth = '100%';
-            img.style.margin = '10px 0';
-            img.style.borderRadius = '8px';
-            
-            const content = document.getElementById('note-content');
-            content.appendChild(img);
-            scheduleAutoSave();
-        };
-        reader.readAsDataURL(file);
+        const content = document.getElementById('note-content');
+        await window.insertImgIntoEditor(file, content);
+        scheduleAutoSave();
     }
 
     // Grabación de voz
@@ -68143,11 +68198,32 @@ document.addEventListener('DOMContentLoaded', function() {
         // Pantalla completa
         document.getElementById('fullscreen-note-btn')?.addEventListener('click', toggleFullscreen);
 
-        // Click en imagen dentro del editor de Notebook → pantalla completa
-        document.getElementById('note-content')?.addEventListener('click', (e) => {
-            if (e.target.tagName === 'IMG') {
-                window.viewImageFullscreen(e.target.src);
+        // Mousedown en imagen dentro del editor de Notebook → pantalla completa si no se arrastra
+        document.getElementById('note-content')?.addEventListener('mousedown', (e) => {
+            const img = e.target.closest('img');
+            if (!img) return;
+            const src = img.src;
+            const sx = e.clientX, sy = e.clientY;
+            const onUp = (ue) => {
+                document.removeEventListener('mouseup', onUp);
+                if (Math.abs(ue.clientX - sx) < 6 && Math.abs(ue.clientY - sy) < 6) {
+                    e.preventDefault();
+                    window.viewImageFullscreen(src);
+                }
+            };
+            document.addEventListener('mouseup', onUp);
+        });
+
+        // Pegar imágenes con Ctrl+V en el editor de Notebook
+        document.getElementById('note-content')?.addEventListener('paste', async (e) => {
+            const items = Array.from(e.clipboardData?.items || []).filter(i => i.type.startsWith('image/'));
+            if (!items.length) return;
+            e.preventDefault();
+            const content = document.getElementById('note-content');
+            for (const item of items) {
+                await window.insertImgIntoEditor(item.getAsFile(), content);
             }
+            scheduleAutoSave();
         });
 
         // Voice recorder
