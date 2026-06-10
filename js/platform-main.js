@@ -40528,11 +40528,12 @@ async function _onUserLoginImpl(user) {
     console.log('🔐 Usuario autenticado en onUserLogin:', user.email);
 
     // ── Guardia de aislamiento de datos entre usuarios ────────────────────
-    // Si cambia el user_id (p.ej. sesión de otra cuenta), limpiar Dexie completo
-    // para que el nuevo usuario nunca vea datos del anterior.
+    // Limpia Dexie si detecta un usuario diferente al que está en caché.
+    // La condición NO requiere que _lastUserId exista previamente: si es null
+    // (primera carga o primer deploy con este código) también limpia por seguridad.
     const _lastUserId = localStorage.getItem('_lastUserId');
-    if (_lastUserId && _lastUserId !== user.id) {
-        console.warn('⚠️ [Aislamiento] Usuario diferente detectado — limpiando caché local...');
+    if (_lastUserId !== user.id) {
+        console.warn(`⚠️ [Aislamiento] Usuario cambió (${_lastUserId || 'ninguno'} → ${user.id}) — limpiando caché...`);
         await Promise.all([
             dexieDB.operations.clear(),
             dexieDB.accounts.clear(),
@@ -40544,7 +40545,6 @@ async function _onUserLoginImpl(user) {
             dexieDB.notebookFolders.clear().catch(() => {}),
             dexieDB.generalData.clear().catch(() => {})
         ]).catch(() => {});
-        // También limpiar foto/username del usuario anterior
         localStorage.removeItem('profile-image');
         localStorage.removeItem('username');
         localStorage.removeItem('defaultAccount');
@@ -40553,8 +40553,7 @@ async function _onUserLoginImpl(user) {
     localStorage.setItem('_lastUserId', user.id);
 
     // ── Fase 0: caché local instantáneo (Dexie) ──────────────────────────
-    // Mostrar datos del caché local antes de cualquier petición a red.
-    // Esto hace que las métricas aparezcan en < 100ms en visitas recurrentes.
+    // Solo mostrar datos si pertenecen AL USUARIO ACTUAL (doble protección).
     try {
         const [cachedOps, cachedAccounts, cachedFunded, cachedFinances, cachedSetups] = await Promise.all([
             window.dexieDB?.operations?.toArray().catch(() => []) || Promise.resolve([]),
@@ -40563,13 +40562,22 @@ async function _onUserLoginImpl(user) {
             window.dexieDB?.finances?.toArray().catch(() => []) || Promise.resolve([]),
             window.dexieDB?.setups?.toArray().catch(() => []) || Promise.resolve([])
         ]);
-        if (cachedOps.length > 0) {
-            console.log(`⚡ [Fase 0] Caché local: ${cachedOps.length} operaciones → mostrando métricas al instante`);
-            DB.operations    = cachedOps;
-            DB.accounts      = cachedAccounts.length > 0 ? cachedAccounts : DB.accounts;
-            DB.fundedAccounts = cachedFunded.length > 0 ? cachedFunded : DB.fundedAccounts;
-            DB.finances      = cachedFinances.length > 0 ? cachedFinances : DB.finances;
-            DB.setups        = cachedSetups.length > 0 ? cachedSetups : DB.setups;
+
+        // Filtrar estrictamente por user_id: incluso si Dexie contuviera datos de
+        // otro usuario, nunca se mostrarían al usuario actual
+        const myOps      = cachedOps.filter(o => !o.user_id || o.user_id === user.id);
+        const myAccounts = cachedAccounts.filter(a => !a.user_id || a.user_id === user.id);
+        const myFunded   = cachedFunded.filter(f => !f.user_id || f.user_id === user.id);
+        const myFinances = cachedFinances.filter(f => !f.user_id || f.user_id === user.id);
+        const mySetups   = cachedSetups.filter(s => !s.user_id || s.user_id === user.id);
+
+        if (myOps.length > 0) {
+            console.log(`⚡ [Fase 0] Caché local (usuario verificado): ${myOps.length} operaciones`);
+            DB.operations    = myOps;
+            DB.accounts      = myAccounts.length > 0 ? myAccounts : DB.accounts;
+            DB.fundedAccounts = myFunded.length > 0 ? myFunded : DB.fundedAccounts;
+            DB.finances      = myFinances.length > 0 ? myFinances : DB.finances;
+            DB.setups        = mySetups.length > 0 ? mySetups : DB.setups;
             if (typeof refreshAccountSelector === 'function') refreshAccountSelector();
             if (typeof _paintCachedMetrics === 'function') _paintCachedMetrics();
             if (typeof refreshNewDashboard === 'function') refreshNewDashboard();
