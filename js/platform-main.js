@@ -41125,11 +41125,12 @@ function onUserLogout() {
     currentUser = null;
     window.currentUser = null;
 
-    // Limpiar TODOS los datos de usuario de localStorage
+    // Limpiar datos de usuario de localStorage
+    // IMPORTANTE: NO borrar _lastUserId — lo necesitamos al siguiente login para
+    // detectar si cambió el usuario y limpiar Dexie correctamente
     const userLocalStorageKeys = [
         'profile-image', 'username', 'defaultAccount',
-        'bingx-api-key', 'bingx-secret-key', 'bingx-account-id',
-        '_lastUserId'
+        'bingx-api-key', 'bingx-secret-key', 'bingx-account-id'
     ];
     userLocalStorageKeys.forEach(k => localStorage.removeItem(k));
 
