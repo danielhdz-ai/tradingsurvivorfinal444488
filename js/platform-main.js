@@ -40598,17 +40598,14 @@ async function _onUserLoginImpl(user) {
 
     const localOpsCount = DB.operations?.length || 0;
 
-    // ── Fase 2 en paralelo: historial completo sin esperar Fase 1 ────────
+    // ── Fase 2 en paralelo: historial completo desde Supabase ────────────
+    // IMPORTANTE: la única fuente de verdad es Supabase. Nunca se sincronizan
+    // datos desde el navegador hacia la nube (bulk-sync eliminado: era un vector
+    // de corrupción de datos entre cuentas).
     const phase2Promise = loadOperationsFromSupabase().then(async (fullOperations) => {
         if (!fullOperations?.length) {
-            const synced = await _bulkSyncDexieToCloud();
-            if (synced > 0) {
-                fullOperations = await _loadOperationsViaAPI();
-            }
-        }
-        if (!fullOperations?.length) {
-            console.warn('⚠️ [Fase 2] Sin operaciones en la nube');
-            _showDataLoadBanner('warn', 'No se encontraron operaciones en la nube. Si tenías datos en otro navegador, ábrelos ahí para sincronizar.');
+            console.log('ℹ️ [Fase 2] Sin operaciones en Supabase para este usuario');
+            // Cuenta nueva o sin operaciones — no se muestra ningún banner
             return;
         }
         const currentCount = window.DB?.operations?.length || 0;
@@ -40627,7 +40624,6 @@ async function _onUserLoginImpl(user) {
         }
     }).catch(e => {
         console.warn('⚠️ [Fase 2] Error cargando historial completo:', e.message);
-        _showDataLoadBanner('error', 'Error cargando operaciones. Recarga la página o contacta soporte.');
     });
 
     try {
@@ -40665,7 +40661,13 @@ async function _onUserLoginImpl(user) {
                 .select('username, profile_image')
                 .eq('user_id', user.id)
                 .single();
-            
+
+            // SEGURIDAD: siempre limpiar los datos del usuario anterior ANTES de
+            // aplicar los del usuario actual. Si el nuevo usuario no tiene foto o
+            // username, el header muestra la inicial del email — nunca la del anterior.
+            localStorage.removeItem('profile-image');
+            localStorage.removeItem('username');
+
             if (userSettings) {
                 if (userSettings.username) {
                     localStorage.setItem('username', userSettings.username);
@@ -40675,12 +40677,16 @@ async function _onUserLoginImpl(user) {
                     localStorage.setItem('profile-image', userSettings.profile_image);
                     console.log('✅ Foto de perfil cargada');
                 }
-                // Actualizar header del usuario
-                if (typeof updateUserHeader === 'function') {
-                    updateUserHeader();
-                }
+            }
+            // Actualizar header siempre (con o sin configuración guardada)
+            if (typeof updateUserHeader === 'function') {
+                updateUserHeader();
             }
         } catch (err) {
+            // Aunque falle la carga de settings, limpiar datos del usuario anterior
+            localStorage.removeItem('profile-image');
+            localStorage.removeItem('username');
+            if (typeof updateUserHeader === 'function') updateUserHeader();
             console.warn('⚠️ No se pudo cargar configuración del usuario:', err);
         }
         
@@ -42683,10 +42689,20 @@ function hideAuth() {
 
 function updateUserInfo(user) {
     console.log('👤 Updating user info:', user.email);
-    console.log('🔍 Asignando currentUser...');
+
+    // SEGURIDAD: si el usuario cambió, limpiar INMEDIATAMENTE todos los datos
+    // personales del localStorage antes de actualizar el header. Si no se hace
+    // aquí, updateUserHeader() mostraría la foto/username de la cuenta anterior.
+    const prevUserId = localStorage.getItem('_lastUserId');
+    if (prevUserId && prevUserId !== user.id) {
+        localStorage.removeItem('profile-image');
+        localStorage.removeItem('username');
+        localStorage.removeItem('defaultAccount');
+        console.log('🔒 [Security] Usuario cambió → datos personales limpiados antes de renderizar header');
+    }
+
     currentUser = user;
-    window.currentUser = user; // Hacer accesible globalmente
-    console.log('🔍 currentUser asignado:', currentUser);
+    window.currentUser = user;
     
     // Actualizar header del usuario (nuevo sistema)
     if (typeof updateUserHeader === 'function') {
