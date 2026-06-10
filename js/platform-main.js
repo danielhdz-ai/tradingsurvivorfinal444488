@@ -9579,121 +9579,51 @@ if (typeof MutationObserver !== 'undefined') {
                 downloadNoteBtn.addEventListener('click', downloadAnalyticsNote);
             }
 
-            // ── Imágenes Adjuntas en Analytics Detail ────────────────────────
+            // ── Imágenes Adjuntas en Analytics Detail (se insertan EN el editor) ──
             const analyticsImagesBtn = document.getElementById('analytics-detail-images-btn');
-            const analyticsImagesPanel = document.getElementById('analytics-images-panel');
-            const analyticsImagesFileInput = document.getElementById('analytics-images-file-input');
+            const analyticsEditor = document.getElementById('analytics-detail-notes-editor');
 
-            // Toggle panel
-            if (analyticsImagesBtn && analyticsImagesPanel) {
+            // Botón "Imágenes Adjuntas" → abre file picker → inserta en el editor
+            if (analyticsImagesBtn) {
                 analyticsImagesBtn.addEventListener('click', () => {
-                    const visible = analyticsImagesPanel.style.display !== 'none';
-                    analyticsImagesPanel.style.display = visible ? 'none' : 'block';
-                    if (!visible) renderAnalyticsImages();
+                    const picker = document.createElement('input');
+                    picker.type = 'file';
+                    picker.accept = 'image/*';
+                    picker.multiple = true;
+                    picker.onchange = async () => {
+                        for (const file of picker.files) {
+                            await insertImgIntoAnalyticsEditor(file);
+                        }
+                    };
+                    picker.click();
                 });
             }
 
-            // Seleccionar archivo
-            if (analyticsImagesFileInput) {
-                analyticsImagesFileInput.addEventListener('change', async (e) => {
-                    const files = Array.from(e.target.files);
-                    if (!files.length) return;
-                    await addAnalyticsImages(files);
-                    e.target.value = '';
+            // Click en <img> dentro del editor → pantalla completa
+            if (analyticsEditor) {
+                analyticsEditor.addEventListener('click', (e) => {
+                    if (e.target.tagName === 'IMG') {
+                        window.viewImageFullscreen(e.target.src);
+                    }
                 });
             }
 
-            // Pegar con Ctrl+V dentro del modal
-            document.getElementById('analytics-detail-modal')?.addEventListener('paste', async (ev) => {
-                const items = Array.from(ev.clipboardData?.items || []).filter(it => it.type.startsWith('image/'));
-                if (!items.length) return;
-                ev.preventDefault();
-                const blobs = items.map(it => it.getAsFile());
-                await addAnalyticsImages(blobs);
-                // Mostrar panel si estaba cerrado
-                if (analyticsImagesPanel) analyticsImagesPanel.style.display = 'block';
-                renderAnalyticsImages();
-            });
-
-            async function addAnalyticsImages(files) {
-                const date = modal.dataset.currentDate;
-                if (!date) return;
-                if (!DB.dayAnalysisData) DB.dayAnalysisData = {};
-                if (!DB.dayAnalysisData[date]) DB.dayAnalysisData[date] = {};
-                if (!DB.dayAnalysisData[date].images) DB.dayAnalysisData[date].images = [];
-
-                const newImgs = await Promise.all(files.map(f => new Promise(res => {
-                    const r = new FileReader();
-                    r.onload = ev => res(ev.target.result);
-                    r.readAsDataURL(f);
-                })));
-
-                DB.dayAnalysisData[date].images.push(...newImgs);
-                await dexieDB.generalData.put({ key: 'dayAnalysisData', data: DB.dayAnalysisData });
-                renderAnalyticsImages();
-                showNotification(`${newImgs.length} imagen${newImgs.length > 1 ? 'es añadidas' : ' añadida'}`, 'success');
-            }
-
-            function renderAnalyticsImages() {
-                const date = modal.dataset.currentDate;
-                const grid = document.getElementById('analytics-images-grid');
-                if (!grid) return;
-                const images = DB.dayAnalysisData?.[date]?.images || [];
-
-                if (!images.length) {
-                    grid.innerHTML = '<p class="col-span-full text-center text-text-secondary italic py-6 text-sm">Sin imágenes. Usa "Agregar" o pega con Ctrl+V</p>';
-                    return;
-                }
-
-                grid.innerHTML = '';
-                let dragSrc = null;
-
-                images.forEach((img, idx) => {
-                    const card = document.createElement('div');
-                    card.style.cssText = 'position:relative;border-radius:8px;overflow:hidden;border:1px solid var(--border);cursor:grab;';
-                    card.draggable = true;
-
-                    const imgEl = document.createElement('img');
-                    imgEl.src = img;
-                    imgEl.style.cssText = 'width:100%;height:140px;object-fit:cover;display:block;pointer-events:none;';
-
-                    const del = document.createElement('button');
-                    del.innerHTML = '<i class="fas fa-trash"></i>';
-                    del.style.cssText = 'position:absolute;top:6px;right:6px;background:#dc2626;color:white;border:none;width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:0.65rem;opacity:0;transition:opacity 0.2s;display:flex;align-items:center;justify-content:center;';
-                    del.addEventListener('click', async (e) => {
-                        e.stopPropagation();
-                        if (!confirm('¿Eliminar imagen?')) return;
-                        DB.dayAnalysisData[date].images.splice(idx, 1);
-                        await dexieDB.generalData.put({ key: 'dayAnalysisData', data: DB.dayAnalysisData });
-                        renderAnalyticsImages();
-                    });
-
-                    card.addEventListener('mouseenter', () => del.style.opacity = '1');
-                    card.addEventListener('mouseleave', () => del.style.opacity = '0');
-                    card.addEventListener('click', () => viewDayImageFullscreen(images, idx));
-
-                    card.addEventListener('dragstart', (e) => { dragSrc = idx; card.style.opacity = '0.35'; e.dataTransfer.effectAllowed = 'move'; });
-                    card.addEventListener('dragend', () => { card.style.opacity = ''; });
-                    card.addEventListener('dragover', (e) => { e.preventDefault(); card.style.borderColor = 'var(--primary)'; });
-                    card.addEventListener('dragleave', () => { card.style.borderColor = ''; });
-                    card.addEventListener('drop', async (e) => {
-                        e.preventDefault(); card.style.borderColor = '';
-                        if (dragSrc === null || dragSrc === idx) return;
-                        const arr = DB.dayAnalysisData[date].images;
-                        const [moved] = arr.splice(dragSrc, 1);
-                        arr.splice(idx, 0, moved);
-                        await dexieDB.generalData.put({ key: 'dayAnalysisData', data: DB.dayAnalysisData });
-                        renderAnalyticsImages();
-                    });
-
-                    card.appendChild(imgEl);
-                    card.appendChild(del);
-                    grid.appendChild(card);
+            async function insertImgIntoAnalyticsEditor(file) {
+                return new Promise(resolve => {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                        const editor = document.getElementById('analytics-detail-notes-editor');
+                        if (!editor) return resolve();
+                        editor.focus();
+                        document.execCommand('insertHTML', false,
+                            `<img src="${ev.target.result}" style="max-width:100%;height:auto;margin:8px 0;border-radius:6px;cursor:pointer;" />`
+                        );
+                        updateCharCountAnalytics();
+                        resolve();
+                    };
+                    reader.readAsDataURL(file);
                 });
             }
-
-            // Exponer para que se llame al abrir el modal con fecha
-            window._renderAnalyticsImages = renderAnalyticsImages;
 
             // Event listeners para el modal de PDF Report
             const pdfModal = document.getElementById('pdf-report-modal');
@@ -17171,7 +17101,7 @@ if (typeof MutationObserver !== 'undefined') {
             
             // Mostrar/ocultar botón de imágenes según tipo de análisis
             const imagesBtn = document.getElementById('analytics-detail-images-btn');
-            if (imagesBtn) imagesBtn.style.display = type === 'date' ? '' : 'none';
+            if (imagesBtn) imagesBtn.style.display = type === 'date' ? 'inline-flex' : 'none';
 
             if (type === 'date') {
                 // Mostrar tabs para análisis de día
@@ -17488,16 +17418,6 @@ if (typeof MutationObserver !== 'undefined') {
                 
                 // Cargar notas del día
                 loadDailyNotes(value);
-
-                // Mostrar imágenes si el panel está visible (o al menos actualizarlo)
-                const imgPanel = document.getElementById('analytics-images-panel');
-                const hasImages = (DB.dayAnalysisData?.[value]?.images?.length || 0) > 0;
-                if (imgPanel) {
-                    imgPanel.style.display = hasImages ? 'block' : 'none';
-                    if (hasImages && typeof window._renderAnalyticsImages === 'function') {
-                        window._renderAnalyticsImages();
-                    }
-                }
             } else if (type === 'month') {
                 // Guardar el mes actual en el modal para las notas
                 modal.dataset.currentMonth = value;
@@ -68004,18 +67924,23 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Pantalla completa para el editor de notas
+    let _notebookFsPlaceholder = null;
     function toggleFullscreen() {
         const editorContainer = document.getElementById('note-editor-container');
         const fullscreenBtn = document.getElementById('fullscreen-note-btn');
         const noteContent = document.getElementById('note-content');
-        
+
         if (!editorContainer.classList.contains('fullscreen-note')) {
-            // Activar pantalla completa
+            // Mover el editor a document.body para evitar stacking context del section-container
+            _notebookFsPlaceholder = document.createElement('div');
+            _notebookFsPlaceholder.id = 'note-editor-fs-placeholder';
+            editorContainer.parentNode.insertBefore(_notebookFsPlaceholder, editorContainer);
+            document.body.appendChild(editorContainer);
+
             editorContainer.classList.add('fullscreen-note');
             fullscreenBtn.innerHTML = '<i class="fas fa-compress"></i>';
             fullscreenBtn.title = 'Salir de pantalla completa';
-            
-            // Estilos para pantalla completa - completamente opaco
+
             const isLight = document.body.classList.contains('light-mode');
             editorContainer.style.cssText = `
                 position: fixed !important;
@@ -68034,8 +67959,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 padding: 0 !important;
                 overflow: hidden !important;
             `;
-            
-            // Ajustar el contenido para que use todo el espacio
             noteContent.style.cssText = `
                 flex: 1 1 auto !important;
                 overflow-y: auto !important;
@@ -68044,12 +67967,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 padding: 2rem !important;
             `;
         } else {
-            // Salir de pantalla completa
+            // Restaurar: devolver al placeholder
+            if (_notebookFsPlaceholder) {
+                _notebookFsPlaceholder.parentNode.insertBefore(editorContainer, _notebookFsPlaceholder);
+                _notebookFsPlaceholder.remove();
+                _notebookFsPlaceholder = null;
+            }
             editorContainer.classList.remove('fullscreen-note');
             fullscreenBtn.innerHTML = '<i class="fas fa-expand"></i>';
             fullscreenBtn.title = 'Pantalla completa';
-            
-            // Restaurar estilos originales
             editorContainer.style.cssText = '';
             noteContent.style.cssText = 'flex: 1; padding: 1.5rem; overflow-y: auto; min-height: 500px; max-height: calc(100vh - 400px);';
         }
@@ -68216,6 +68142,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Pantalla completa
         document.getElementById('fullscreen-note-btn')?.addEventListener('click', toggleFullscreen);
+
+        // Click en imagen dentro del editor de Notebook → pantalla completa
+        document.getElementById('note-content')?.addEventListener('click', (e) => {
+            if (e.target.tagName === 'IMG') {
+                window.viewImageFullscreen(e.target.src);
+            }
+        });
 
         // Voice recorder
         document.getElementById('start-recording-btn')?.addEventListener('click', startRecording);
