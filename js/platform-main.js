@@ -62147,94 +62147,121 @@ document.addEventListener('DOMContentLoaded', function() {
     function createDayChart(date, operations) {
         const canvas = document.getElementById(`day-chart-${date}`);
         if (!canvas) return;
-        
-        // Destruir gráfico existente si lo hay
-        if (dayCharts[date]) {
-            dayCharts[date].destroy();
-        }
-        
-        // Ordenar operaciones por hora
+
+        if (dayCharts[date]) { dayCharts[date].destroy(); }
+
+        // Ordenar por hora de salida (o entrada como fallback)
         const sortedOps = [...operations].sort((a, b) => {
-            const timeA = a.entryTime || '00:00';
-            const timeB = b.entryTime || '00:00';
-            return timeA.localeCompare(timeB);
+            const tA = a.exitTime || a.exit_time || a.entryTime || '12:00';
+            const tB = b.exitTime || b.exit_time || b.entryTime || '12:00';
+            return tA.localeCompare(tB);
         });
-        
-        // Calcular P&L acumulado
+
+        // Curva acumulada desde 0
         let cumulative = 0;
-        const labels = [];
-        const data = [];
-        const positiveData = [];
-        const negativeData = [];
-        
-        sortedOps.forEach((op, index) => {
+        const chartData  = [0];
+        const chartLabels = ['Inicio'];
+        const pointColors = ['rgba(255,255,255,0.3)'];
+
+        sortedOps.forEach((op, i) => {
             const pl = convertCurrency(op.pl || 0, op.currency, DB.settings.defaultCurrency);
             cumulative += pl;
-            
-            labels.push(`#${index + 1}`);
-            data.push(cumulative);
-            
-            if (cumulative >= 0) {
-                positiveData.push(cumulative);
-                negativeData.push(null);
-            } else {
-                positiveData.push(null);
-                negativeData.push(cumulative);
-            }
+            chartData.push(parseFloat(cumulative.toFixed(2)));
+
+            const t = op.exitTime || op.exit_time || op.entryTime;
+            chartLabels.push(t ? t.substring(0, 5) : `#${i + 1}`);
+            pointColors.push(cumulative >= 0 ? '#39ff14' : '#ff4136');
         });
-        
+
         const ctx = canvas.getContext('2d');
-        
+
+        // Plugin: gradiente dinámico fill verde/rojo split en y=0
+        const dynamicGradientPlugin = {
+            id: `dayGrad-${date}`,
+            beforeDatasetsDraw(chart) {
+                const { ctx: c, chartArea: ca, scales: { y } } = chart;
+                if (!ca) return;
+                const zeroY = Math.max(ca.top, Math.min(ca.bottom, y.getPixelForValue(0)));
+                const pct   = (zeroY - ca.top) / (ca.bottom - ca.top);
+                const grad  = c.createLinearGradient(0, ca.top, 0, ca.bottom);
+
+                if (pct <= 0.001) {
+                    grad.addColorStop(0, 'rgba(255,65,54,0.35)');
+                    grad.addColorStop(1, 'rgba(255,65,54,0.08)');
+                } else if (pct >= 0.999) {
+                    grad.addColorStop(0, 'rgba(57,255,20,0.40)');
+                    grad.addColorStop(1, 'rgba(57,255,20,0.05)');
+                } else {
+                    grad.addColorStop(0,       'rgba(57,255,20,0.40)');
+                    grad.addColorStop(pct - 0.001, 'rgba(57,255,20,0.12)');
+                    grad.addColorStop(pct,     'rgba(255,255,255,0.0)');
+                    grad.addColorStop(pct + 0.001, 'rgba(255,65,54,0.12)');
+                    grad.addColorStop(1,       'rgba(255,65,54,0.35)');
+                }
+                chart.data.datasets[0].backgroundColor = grad;
+            }
+        };
+
         dayCharts[date] = new Chart(ctx, {
             type: 'line',
+            plugins: [dynamicGradientPlugin],
             data: {
-                labels: labels,
-                datasets: [
-                    {
-                        label: 'Profit',
-                        data: positiveData,
-                        borderColor: '#39ff14',
-                        backgroundColor: 'rgba(57, 255, 20, 0.3)',
-                        fill: 'origin',
-                        borderWidth: 2,
-                        tension: 0.4,
-                        pointRadius: 3,
-                        pointHoverRadius: 5
-                    },
-                    {
-                        label: 'Loss',
-                        data: negativeData,
-                        borderColor: '#ff4136',
-                        backgroundColor: 'rgba(255, 65, 54, 0.3)',
-                        fill: 'origin',
-                        borderWidth: 2,
-                        tension: 0.4,
-                        pointRadius: 3,
-                        pointHoverRadius: 5
+                labels: chartLabels,
+                datasets: [{
+                    label: 'Running P&L',
+                    data: chartData,
+                    borderColor: '#39ff14',
+                    backgroundColor: 'rgba(57,255,20,0.3)',
+                    fill: 'origin',
+                    borderWidth: 2.5,
+                    tension: 0.3,
+                    pointRadius: chartData.map((_, i) => i === 0 ? 0 : 4),
+                    pointHoverRadius: 7,
+                    pointBackgroundColor: pointColors,
+                    pointBorderColor:     pointColors,
+                    pointBorderWidth: 1.5,
+                    segment: {
+                        borderColor: (ctx) => {
+                            const mid = (ctx.p0.parsed.y + ctx.p1.parsed.y) / 2;
+                            return mid < 0 ? '#ff4136' : '#39ff14';
+                        }
                     }
-                ]
+                }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                interaction: {
-                    mode: 'index',
-                    intersect: false
-                },
+                animation: { duration: 400 },
+                interaction: { mode: 'index', intersect: false },
                 plugins: {
-                    legend: {
-                        display: false
-                    },
+                    legend: { display: false },
                     tooltip: {
-                        backgroundColor: 'rgba(26, 26, 26, 0.95)',
-                        titleColor: '#ffffff',
-                        bodyColor: '#ffffff',
-                        borderColor: '#39ff14',
+                        backgroundColor: 'rgba(10,10,10,0.95)',
+                        titleColor: '#888',
+                        bodyColor: '#fff',
+                        borderColor: 'rgba(255,255,255,0.08)',
                         borderWidth: 1,
+                        padding: 10,
                         callbacks: {
+                            title: (items) => {
+                                const i = items[0].dataIndex;
+                                if (i === 0) return 'Inicio del día  ·  $0.00';
+                                const op = sortedOps[i - 1];
+                                const t  = op.exitTime || op.exit_time || op.entryTime || '';
+                                return `Op #${i}  ${op.instrument || ''}  ${t.substring(0,5)}`.trim();
+                            },
                             label: (item) => {
-                                if (item.parsed.y === null) return '';
-                                return `P&L Acumulado: $${item.parsed.y.toFixed(2)}`;
+                                const v = item.parsed.y;
+                                const sign = v >= 0 ? '+' : '';
+                                return ` Acumulado: ${sign}$${v.toFixed(2)}`;
+                            },
+                            afterLabel: (item) => {
+                                const i = item.dataIndex;
+                                if (i === 0) return '';
+                                const op = sortedOps[i - 1];
+                                const pl = convertCurrency(op.pl || 0, op.currency, DB.settings.defaultCurrency);
+                                const sign = pl >= 0 ? '+' : '';
+                                return ` Esta op:  ${sign}$${pl.toFixed(2)}`;
                             }
                         }
                     }
@@ -62242,23 +62269,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 scales: {
                     x: {
                         display: true,
-                        grid: {
-                            color: 'rgba(255, 255, 255, 0.05)'
-                        },
-                        ticks: {
-                            color: '#a0a0a0',
-                            font: { size: 10 }
-                        }
+                        grid: { color: 'rgba(255,255,255,0.04)' },
+                        ticks: { color: '#555', font: { size: 10 } }
                     },
                     y: {
                         display: true,
                         grid: {
-                            color: 'rgba(255, 255, 255, 0.05)'
+                            color:     (ctx) => ctx.tick.value === 0 ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.04)',
+                            lineWidth: (ctx) => ctx.tick.value === 0 ? 1.5 : 1,
                         },
                         ticks: {
-                            color: '#a0a0a0',
+                            color: (ctx) => ctx.tick.value >= 0 ? '#39ff14' : '#ff4136',
                             font: { size: 10 },
-                            callback: (value) => '$' + value.toFixed(0)
+                            callback: (v) => (v >= 0 ? '+' : '') + '$' + v.toFixed(0)
                         }
                     }
                 }
