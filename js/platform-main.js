@@ -40534,17 +40534,20 @@ async function _onUserLoginImpl(user) {
     const _lastUserId = localStorage.getItem('_lastUserId');
     if (_lastUserId !== user.id) {
         console.warn(`⚠️ [Aislamiento] Usuario cambió (${_lastUserId || 'ninguno'} → ${user.id}) — limpiando caché...`);
-        await Promise.all([
-            dexieDB.operations.clear(),
-            dexieDB.accounts.clear(),
-            dexieDB.finances.clear(),
-            dexieDB.fundedAccounts.clear().catch(() => {}),
-            dexieDB.fundedHistory.clear().catch(() => {}),
-            dexieDB.setups.clear().catch(() => {}),
-            dexieDB.notebookNotes.clear().catch(() => {}),
-            dexieDB.notebookFolders.clear().catch(() => {}),
-            dexieDB.generalData.clear().catch(() => {})
-        ]).catch(() => {});
+        // CRÍTICO: limpiar tabla por tabla con catch individual para que un fallo
+        // en una tabla no deje las demás sin limpiar (datos del usuario anterior visibles)
+        const tablesToClear = [
+            dexieDB.operations,
+            dexieDB.accounts,
+            dexieDB.finances,
+            dexieDB.fundedAccounts,
+            dexieDB.fundedHistory,
+            dexieDB.setups,
+            dexieDB.notebookNotes,
+            dexieDB.notebookFolders,
+            dexieDB.generalData
+        ];
+        await Promise.all(tablesToClear.map(t => t?.clear?.().catch(() => {})));
         localStorage.removeItem('profile-image');
         localStorage.removeItem('username');
         localStorage.removeItem('defaultAccount');
@@ -40563,13 +40566,15 @@ async function _onUserLoginImpl(user) {
             window.dexieDB?.setups?.toArray().catch(() => []) || Promise.resolve([])
         ]);
 
-        // Filtrar estrictamente por user_id: incluso si Dexie contuviera datos de
-        // otro usuario, nunca se mostrarían al usuario actual
-        const myOps      = cachedOps.filter(o => !o.user_id || o.user_id === user.id);
-        const myAccounts = cachedAccounts.filter(a => !a.user_id || a.user_id === user.id);
-        const myFunded   = cachedFunded.filter(f => !f.user_id || f.user_id === user.id);
-        const myFinances = cachedFinances.filter(f => !f.user_id || f.user_id === user.id);
-        const mySetups   = cachedSetups.filter(s => !s.user_id || s.user_id === user.id);
+        // CRÍTICO: filtro ESTRICTO por user_id. Se descarta cualquier registro que
+        // no tenga user_id o que pertenezca a otro usuario. El operador !o.user_id
+        // anterior era un vector de fuga de datos (datos sin user_id se mostraban
+        // a cualquier usuario autenticado).
+        const myOps      = cachedOps.filter(o => o.user_id === user.id);
+        const myAccounts = cachedAccounts.filter(a => a.user_id === user.id);
+        const myFunded   = cachedFunded.filter(f => f.user_id === user.id);
+        const myFinances = cachedFinances.filter(f => f.user_id === user.id);
+        const mySetups   = cachedSetups.filter(s => s.user_id === user.id);
 
         if (myOps.length > 0) {
             console.log(`⚡ [Fase 0] Caché local (usuario verificado): ${myOps.length} operaciones`);
@@ -42017,6 +42022,7 @@ function _showDataLoadBanner(type, message) {
 function _mapOperations(data) {
     return data.map(operation => ({
         id: operation.id,
+        user_id: operation.user_id,   // CRÍTICO: preservar user_id para aislamiento en Dexie
         accountId: operation.account_id,
         date: operation.date,
         instrument: operation.instrument,
@@ -42784,7 +42790,9 @@ async function checkAuth() {
             return;
         }
         
-        const session = await resolveAuthSession();
+        // Obtener sesión directamente desde Supabase (resolveAuthSession fue eliminada
+        // porque nunca estuvo definida — causaba ReferenceError silencioso)
+        const { data: { session } } = await supabase.auth.getSession();
 
         console.log('🔐 Sesión:', session?.user ? 'Activa' : 'No activa');
 

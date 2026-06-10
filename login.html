@@ -1026,13 +1026,14 @@
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdha2lhbWFyZG1sZ2Z0ZnJseGttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwMjczMzUsImV4cCI6MjA2ODYwMzMzNX0.wR3c9DMtSXzoagFDJdrmYqnN6vjfQMn8ijtUdOSpmYM'
     );
 
-    // ─── Check if already logged in ─────────────────────────
-    // En localhost/Live Server no redirigir automáticamente (facilita el diseño)
+    // ─── Seguridad: si hay sesión activa, cerrar antes de mostrar el login ──
+    // NUNCA redirigir a /app desde /login automáticamente: si otro usuario navega
+    // a /login mientras hay una sesión de otra cuenta en el mismo navegador,
+    // la redirección automática expondría los datos de la cuenta anterior.
+    // La solución segura es forzar el cierre de sesión al cargar /login.
     const isLocalDev = ['localhost', '127.0.0.1'].includes(location.hostname) ||
                        location.hostname.startsWith('192.168.');
     async function checkSession() {
-        if (isLocalDev) return;
-
         const params = new URLSearchParams(window.location.search);
 
         if (params.get('logout') === '1') {
@@ -1042,18 +1043,21 @@
             return;
         }
 
-        const loggedOutAt = parseInt(sessionStorage.getItem('ts_logged_out') || '0', 10);
-        if (loggedOutAt && Date.now() - loggedOutAt < 8000) {
-            return;
-        }
         sessionStorage.removeItem('ts_logged_out');
 
-        try {
-            const { data: { session } } = await _sb.auth.getSession();
-            if (session) {
-                window.location.replace('/app');
-            }
-        } catch (e) { /* ignore */ }
+        // Si hay una sesión activa al llegar a /login, cerrarla para que el
+        // próximo usuario pueda autenticarse con sus propias credenciales.
+        // Esto previene que datos de una cuenta se filtren a otra cuenta
+        // cuando se comparte el mismo navegador o se cambia de cuenta.
+        if (!isLocalDev) {
+            try {
+                const { data: { session } } = await _sb.auth.getSession();
+                if (session) {
+                    console.log('[Security] Sesión activa detectada en /login — cerrando sesión anterior:', session.user.email);
+                    await _sb.auth.signOut({ scope: 'local' });
+                }
+            } catch (e) { /* ignore */ }
+        }
     }
     checkSession();
 
